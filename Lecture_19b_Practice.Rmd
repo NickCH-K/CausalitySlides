@@ -1,0 +1,291 @@
+---
+title: "Lecture 19b Methods Practice"
+author: "Nick Huntington-Klein"
+date: "March 20, 2019"
+output:   
+  revealjs::revealjs_presentation:
+    theme: solarized
+    transition: slide
+    self_contained: true
+    smart: true
+    fig_caption: true
+    reveal_options:
+      slideNumber: true
+    
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning=FALSE, message=FALSE)
+library(tidyverse)
+library(dagitty)
+library(ggdag)
+library(gganimate)
+library(ggthemes)
+library(Cairo)
+theme_set(theme_gray(base_size = 15))
+```
+
+## Recap
+
+- We've been going over ways in which we can isolate causal effects
+- We can select similar control groups using matching or controlling (what economists call "selection on observables")
+- We can use a group at a different time as its own control with fixed effects
+- Or, "natural experiments":
+- When a treatment is applied at a particular time, we can select a reasonable control to account for the effects of time using difference-in-difference
+- When the treatment is assigned according to a cutoff in a running variable, we can use regression discontinuity
+
+## Today
+
+- We're going to be trying to *apply* these methods
+- Given a real-world causal statement, how can we go about selecting a method?
+- We can follow the steps we've been taking all along!
+
+## Our Approach
+
+1. Consider the problem
+2. Think about what we think the *data-generating process* is
+3. Draw a diagram
+4. Figure out the method (we may have to control for some things for the usable diagram to emerge!)
+5. Actually implement the method
+
+## Think about the Data-Generating Process
+
+- Our example from last time was corporate social responsibility
+- We think that CSR might affect stock prices, and we know that CSR resolutions are taken up by winning vote
+- Of course, the vote share might be related to a million different things about the company, or about the company at that time
+
+## Draw a Diagram
+
+- `comp` is "company", `c.t` is company at a particular time
+```{r, dev='CairoPNG', echo=FALSE, fig.width=6,fig.height=5}
+dag <- dagify(price~CSR+comp+c.t,
+              CSR~win,
+              win~vote,
+              vote~comp+c.t,
+              coords=list(
+                x=c(CSR=1,win=1.5,vote=2,comp=2.5,c.t=3,price=3),
+                y=c(CSR=1.5,win=1.75,vote=2,comp=2.25,c.t=2.25,price=1)
+              )) %>% tidy_dagitty()
+ggdag(dag,node_size=20)
+```
+
+## Figure out a Method
+
+- What back doors do we have? (`CSR <- win <- vote <- comp/c.t -> price`)
+- Can we measure enough variables to control/match to close them all?
+- Are they all individual-level or time-level variables so that we can do a diff-in-diff with panel data?
+- <span style="color:red">Do we have a running variable and assign the treatment with a cutoff so we can do regression discontinuity?</span>
+
+## Implement the Method
+
+```{r, echo=TRUE, eval=FALSE}
+#I don't actually have this data but we can pretend
+data(CSRdata)
+
+bandwidth <- .02
+cutoff <- .5
+CSRdata %>% 
+  #Limit to just the area around the cutoff
+  filter(abs(vote - cutoff) < bandwidth) %>%
+  #Then, compare winning votes to losing votes
+  mutate(win = vote > cutoff) %>%
+  group_by(win) %>%
+  summarize(price = mean(price))
+```
+
+## Let's do More
+
+- Let's focus on the topic of real importance:
+- How can we build a research design based on our causal question of interest and what we know about the world?
+- I have five questions and topics, let's work together to build diagrams and pick a research design
+- Don't look ahead in the slides!
+
+## Fishery Sustainability
+
+- We don't want to overfish the oceans! However, common economic logic dictates that fish stocks are a "common good" likely to be overharvested if without restrictions
+- One way of restricting fishing is to implement a transferable quota (ITQ) - a "cap and trade" basically
+- This limits the allowable catch, and by allowing people to trade their allotment, ensures that the most efficient boats do the catching
+- But does it work? Does `ITQ` affect next year's fishing `stock`?
+
+## Fishery Sustainability
+
+Draw the diagram! To consider:
+
+- Some countries implement ITQs, others don't. We can observe countries both before and after the ITQ
+- Certain characteristics of the country, like size, coastline, politics, etc., might be related to the decision to implement
+- ITQ doesn't affect `stock` directly, but by reducing this year's `catch`
+- The global economy changes over time, and affects fish demand and thus `catch`
+
+## Fishery Sustainability
+
+`coun` = country characteristics, `econ` = world economy
+
+```{r, dev='CairoPNG', echo=FALSE, fig.width=8,fig.height=5 }
+dag <- dagify(stock~catch+coun+time,
+              catch~ITQ+econ,
+              econ~U1,
+              time~U1,
+              ITQ~coun+time,
+              coords=list(
+                x=c(ITQ=1,time=1,U1=0,econ=1,catch=2,coun=2,stock=3),
+                y=c(ITQ=1,time=0,U1=-.5,econ=-1,catch=1,coun=2,stock=1)
+              )) %>% tidy_dagitty()
+ggdag(dag,node_size=20)
+```
+
+## Fishery Sustainability
+
+- This is a clear case for applying difference-in-differences!
+- Do we need to worry about that `econ` back door?
+- Nope! Note that all back doors through `econ` either go through `time` (which we control for naturally without DID) or through `ITQ -> catch <- econ` in which `catch` is a collider and we're already closed.
+
+## Financial Reports
+
+- Do financial statements, required to be released annually, affect a firm's stock price?
+- You might expect them to! After all, this contains important information about the company
+- But maybe not - these reports just say what the company's financial health is, and investors paying attention may already know that so it would already be baked into the price.
+- What is the effect of the financial `rep`ort on stock `price`?
+
+## Financial Reports
+
+Draw the diagram! To consider:
+
+- The govt requires `rep`orts be released at a certain `time`, so there's a particular time at which the report goes from being unknown to known
+- A firm's `health` will change over time and also affect the `price`
+- The overall `econ`omy will also change over time, and affect firm health
+- Firm health is too complex to be measured and controlled for
+
+## Financial Reports
+
+```{r, dev='CairoPNG', echo=FALSE, fig.width=8,fig.height=6}
+dag <- dagify(time~U1+U2,
+              health~U1+econ,
+              rep~time,
+              econ~U2,
+              price~rep+health+econ,
+              coords=list(
+                x=c(time=2,health=1,U1=1.5,U2=2.5,econ=3,rep=2,price=2),
+                y=c(time=3,health=2,U1=3,U2=3,econ=2,rep=2.3,price=1)
+              )) %>% tidy_dagitty()
+ggdag(dag,node_size=20)
+```
+
+## Financial Reports
+
+- This is a case for a regression discontinuity with `time` as the running variable
+- When an RDD uses `time` as a running variable it's called an "interrupted time series"
+- Generally not considered quite as trustworthy as other RDDs, since it's more likely that other stuff changes across the before/after barrier than across the below cutoff/above cutoff barrier
+
+## Medicare and Retirement
+
+- Does having health insurance encourage you to take more risks? Like quitting your job?
+- Many people in the US get health insurance through their employer and have no realistic way of paying for it otherwise
+- At age 65 you become eligible for Medicare
+- Does Medicare make people quit their jobs?
+
+## Medicare and Retirement
+
+Draw a diagram! To consider:
+
+- You become eligible for `med`icare at exactly the day you `turn65`.
+- Your overall age, and your decision to `quit`, may be related in different ways to many things like `race`, `gen`der, before-age-65 `health`, and `inc`ome. Some of these things may also affect each other
+- Your `inc`ome may also determine whether or not you choose to use Medicare (or go with something private instead)
+
+## Medicare and Retirement
+
+```{r, dev='CairoPNG', echo=FALSE, fig.width=8,fig.height=6}
+dag <- dagify(med~turn65+inc,
+              health~age,
+              turn65~age,
+              quit~med+inc+race+gen+health,
+              race~age,
+              inc~age+race,
+              gen~age,
+              coords=list(
+                x=c(age=2,race=1,gen=1,inc=1.5,turn65=2.5,med=3,quit=3.5,health=1.5),
+                y=c(age=1,race=.5,gen=1.5,inc=2,turn65=1,med=1,quit=1,health=.5)
+              )) %>% tidy_dagitty()
+ggdag(dag,node_size=20)
+```
+
+## Medicare and Retirement
+
+- Regression discontinuity again, this time with age as running variable
+- Lots of back doors! But no need for controls, the RDD isolates just our path of interest here
+- As long as the treatment is "turning 65" - if the treatment is "receives Medicare" we still need to control for income - why?
+- Note: how can age "cause" race or gender? Why, differential mortality rates of course!
+
+## Monetary Policy
+
+- A standard economics result is that monetary policy - putting more money into the economy, which the Federal Reserve does by buying treasury bonds ("monetary policy") - leads to more inflation
+- Of course, there might be other reasons why we see monetary policy linked to inflation
+- Perhaps, for example, the kinds of things that make the Fed respond by buying bonds happen to lead to inflation on their own?
+
+## Monetary Policy
+
+Draw a diagram! To consider:
+
+- Buying/selling bonds (monetary policy, `MP`) changes the amount of `money` in the economy
+- Inflation comes from the amount of money there is relative to the amount of *stuff* there is, which comes from economic `prod`uctivity and `unemp`loyment
+- Money in the economy is also affected by the amount of money tied up in `inv`estments
+- And your `coun`try characteristics affect everything too!
+
+## Monetary Policy
+
+```{r, dev='CairoPNG', echo=FALSE, fig.width=8,fig.height=6}
+dag <- dagify(MP~coun+unemp+prod+inv,
+              inv~coun,
+              prod~inv+unemp+coun,
+              unemp~coun,
+              money~inv+MP+coun,
+              inf~money+prod+unemp,
+              
+              coords=list(
+                x=c(MP=1,coun=3,prod=2,inv=1.5,unemp=1,money=2,inf=3),
+                y=c(MP=2,coun=1.5,prod=1,inv=1,unemp=1,money=2,inf=3)
+              )) %>% tidy_dagitty()
+ggdag(dag,node_size=20)
+```
+
+## Monetary Policy
+
+- For this one we need lots of controls!
+- We have back doors through `unemp`, `inv`, `prod`, and `coun`
+- So we control for all of them with controlling or matching. For `coun` we need fixed effects.
+
+## The Minimum Wage
+
+- A classic causal question is "what is the effect of the minimum wage on employment?"
+- Principles of econ classes point out that raising the minimum wage (like raising the price on anything) should reduce the number of people employed
+- However there are other wrinkles: what if people take that money and spend it, improving the economy and increasing employment that way-
+- Or what if the labor market isn't competitive, meaning that increasing wages might actually encourage more employment?
+
+## The Minimum Wage
+
+Draw a diagram! To consider:
+
+- In 1992 (i.e. in a certain `year`), New Jersey increased their `MW` from \$4.25 to \$5.05
+- Neighboring Pennsylvania didn't. So the `MW` differs by `state`
+- We can look at fast food restaurants (most likely to be affected) just around the border
+- It's possible that the two states had different `trends` in terms of how their labor markets were changing
+- The national `econ`omy might have also had an effect on `unemp`loyment
+- What is the effect of the `MW` increase on `unemp`loyment?
+
+## The Minimum Wage
+
+```{r, dev='CairoPNG', echo=FALSE, fig.width=8,fig.height=6}
+dag <- dagify(MW~state+year+trends,
+              unemp~MW+state+year+trends+econ,
+              econ~year,
+              coords=list(
+                x=c(MW=1,state=1,year=2,trends=1,unemp=2,econ=1.5),
+                y=c(MW=2,state=1,year=1,trends=2.5,unemp=2,econ=1)
+              )) %>% tidy_dagitty()
+ggdag(dag,node_size=20)
+```
+
+## The Minimum Wage
+
+- A good spot for difference-in-differences!
+- We need to control for `trends` too - DID won't handle that on its own as it has to do with changes in the gap BETWEEN the two states over time.
+- No need to control for `econ` - the DID adjustment for `year` handles that back door

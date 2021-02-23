@@ -1,0 +1,550 @@
+---
+title: "Lecture 2: Describing Relationships"
+author: "Nick Huntington-Klein"
+date: "`r Sys.Date()`"
+output:   
+  revealjs::revealjs_presentation:
+    theme: solarized
+    transition: slide
+    self_contained: true
+    smart: true
+    fig_caption: true
+    reveal_options:
+      slideNumber: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+library(tidyverse)
+library(purrr)
+library(patchwork)
+library(ggpubr)
+library(haven)
+
+oster <- read_dta('nhanes_summary_cleaned.dta') %>%
+  mutate(supplement_vite_single = case_when(
+    !supplement_vite_single ~ 'No Vitamin E',
+    TRUE ~ 'Took Vitamin E'
+  ))
+theme_set(theme_gray(base_size = 15))
+```
+
+## Relationships
+
+- Two variables $X$ and $Y$ are *independent* if learning the value of one tells you nothing about the other
+- For example, knowing the outcome of a roulette spin tells you nothing about what the next spin will be
+- They are *dependent* if learning the value of one *changes the distribution* of the other
+- For example, among all Americans, about 50.8\% are legally female and about 49.2\% are legally male
+- But if we *learn that someone's name is Susan*, that distribution will change considerably in favor of female!
+
+## Conditional Values
+
+- Another way of saying we *learn the value of one variable* is to say we *condition* on the value of that variable
+- "Conditional on someone's name being Susan, the distribution of legal sex is 96% female and 4% male"
+- P(Gender | Name = "Susan")
+- All the stuff we talked about last time with distributions applies here
+- It just applies only to *a portion of the data* (the Susans!)
+
+## Conditional Means
+
+- In many fields, including economics, we are very interested in calculating *conditional means*
+- i.e. *what is the mean of the conditional distribution?*
+- And we want to know this not only for *one* value of the variable we're conditioning on, but *all* the values
+- The *population* conditional mean is the *conditional expectation*, or $E(Y|X)$
+
+## Conditional Means/Expectations and Relationships
+
+- Talking about how two variables are related is just another way of talking about conditional values (usually, conditional means)
+- If $X$ and $Y$ are positively related, that means "at higher values of $X$, the conditional expectation $E(Y|X)$ is higher"
+- If they're negatively related, "at higher values of $X$, $E(Y|X)$ is lower"
+- If their relationship is U-shaped (or similar), "at higher values of $X$, $E(Y|X)$ changes but not always in the same direction"
+
+## Conditional Means and Causal Inference
+
+- *Statistics* is great at telling us how two variables are related
+- *Causal inference* is *entirely* about figuring out *which conditional relationships are causal and in what way*
+- You can't infer causality from a relationship alone!
+- As I'll show, some of the relationships $Y|X$ you'll see today may reflect an $X$ that causes $Y$, or a $Y$ that causes $X$, or something else entirely!
+
+## "Explaining"
+
+- We can also say that $Y|X$ is "the part of $Y$ that is *explained by* $X$"
+- If $E(CoffeeCupsPerDay |$ $Occupation = Professor) = 1.79$, and I drink 3 cups per day, then 1.79 of my cups are "explained by" the fact that I'm a professor, and $3 - 1.79 = 1.21$ of my cups are "not explained by" being a professor
+- This can extend to multiple variables!
+- If $E(CoffeeCupsPerDay |$ $Occupation = Professor,$ $Gender = Male) = 2.13$, then 2.13 of my cups are "explained by" occupation and age, and $3 - 2.13 = .83$ of my cups are "not explained by" those two things
+
+## "Explaining"
+
+- This is a purely statistical explanation
+- This doesn't necessarily mean that 2.13 of my cups are *because* I'm a professor and a man, but rather that 2.13 of my cups are *what would be expected* given what you know about me
+- The "explanation why" would be the same *statistical* calculation, but would require us to figure out *which* of those calculations is causal in nature.
+
+## Ways of Demonstrating Conditional Means
+
+- When $X$ only takes a few values, we can just show the distrbution of $Y$ conditional on each of the values of $X$, and compare them to each other. Any distribution-showing method works - density plots, bar graphs...
+- Scatterplots show all the data and imply the conditional mean
+- For continuous $X$ data, you can calculate the conditional mean $Y|X$ over different *ranges* of $X$, either splitting $X$ into bins, or doing "local means"
+- Regression
+
+## Example
+
+- Following the textbook, we'll be using data from Emily Oster's study of the relationship between taking Vitamin E and health outcomes 
+- (and whether that relationship changes as a result of Vitamin E being briefly recommended, then not!)
+- We'll start with versions that can be used for *discrete* $X$ values, like "smoking vs. non-smoking"
+- Remember, the proportion of a binary variable *is* its mean
+
+## Conditional Means: Contrasting Bar Graphs
+
+```{r, echo = FALSE}
+ggplot(oster %>% 
+         select(smoke,supplement_vite_single) %>%
+         na.omit() %>%
+         mutate(smoke = as.factor(
+           case_when(smoke == 0 ~ 'No Smoking',
+                     TRUE ~ 'Smoking')
+         )) %>%
+         group_by(smoke) %>%
+         mutate(BigN = n()) %>%
+         group_by(smoke, supplement_vite_single) %>% 
+         summarize(N = n()/first(BigN)) %>%
+         group_by(smoke, supplement_vite_single) %>%
+         mutate(sup_label = case_when(
+           row_number() == 1 ~ supplement_vite_single,
+           TRUE ~ NA_character_
+         )), 
+       aes(x = smoke, y = N, group = supplement_vite_single)) + 
+  geom_col(position = 'dodge', fill = 'white', color = 'black') + 
+  geom_text(aes(label = sup_label, y = N + .05),position = position_dodge(0.9), family = 'Garamond', size = 14/.pt) +
+  guides(fill = FALSE) +
+  labs(x = NULL, y = 'Proportion') +
+  scale_fill_manual(values = c('gray','black'))+
+  theme_pubr()
+```
+
+## Conditional Means
+
+- Or we can just show that information in a table
+
+```{r, echo = TRUE}
+oster %>% select(smoke,supplement_vite_single) %>%
+         mutate(smoke = as.factor(
+           case_when(smoke == 0 ~ 'No Smoking',
+                     TRUE ~ 'Smoking'))) %>% 
+  table() %>% prop.table(margin = 1)
+```
+## Conditional Means
+
+- That was $TookVitaminE|Smoking$. How about $Smoking|TookVitaminE$?
+
+```{r, echo = TRUE}
+oster %>% select(smoke,supplement_vite_single) %>%
+         mutate(smoke = as.factor(
+           case_when(smoke == 0 ~ 'No Smoking',
+                     TRUE ~ 'Smoking'))) %>% 
+  table() %>% prop.table(margin = 2)
+```
+
+
+## Conditional Distributions: Contrasting Densities
+
+```{r, echo = TRUE, eval = FALSE}
+ggplot(oster, aes(x = vite, linetype = factor(vigorous_exercise_month))) + 
+  geom_density(size = 1.5) +
+  scale_x_log10() +
+  labs(x = 'Vitamin E Taken (Log Scale)',
+       y = 'Density') + 
+  annotate(geom = 'label', x = 3.5, y = .75, label = 'No Vigorous Exercise\nLast Month', hjust = 1, family = 'Garamond', size = 13/.pt) + 
+  annotate(geom = 'label', x = 15, y = .75, label = 'Vigorous Exercise\nLast Month', hjust = 0, family = 'Garamond', size = 13/.pt) + 
+  guides(linetype = FALSE) +
+  theme_pubr()
+```
+
+## Conditional Distributions: Contrasting Densities
+
+```{r}
+ggplot(oster, aes(x = vite, linetype = factor(vigorous_exercise_month))) + 
+  geom_density(size = 1.5) +
+  scale_x_log10() +
+  labs(x = 'Vitamin E Taken (Log Scale)',
+       y = 'Density') + 
+  annotate(geom = 'label', x = 3.5, y = .75, label = 'No Vigorous Exercise\nLast Month', hjust = 1, family = 'Garamond', size = 13/.pt) + 
+  annotate(geom = 'label', x = 15, y = .75, label = 'Vigorous Exercise\nLast Month', hjust = 0, family = 'Garamond', size = 13/.pt) + 
+  guides(linetype = FALSE) +
+  theme_pubr()
+```
+
+## Continuous $X$ Variables
+
+- What if the $X$ variable we want to condition on is continuous? 
+- We have options!
+- A scatterplot will just show *all* the data (which may be too much/busy!)
+- Of course, if we really want to *understand* or *describe* the relationship, we'll need some way of summarizing what we see!
+
+## Scatterplots
+
+```{r, echo = TRUE, eval = FALSE}
+ggplot(oster %>% slice(150:300), aes(x= age, y = heart_health)) + 
+  geom_point() + 
+  labs(x = 'Age',
+       y = 'Heart Health Score') + 
+  theme_pubr()
+```
+
+## Scatterplots
+
+```{r}
+ggplot(oster %>% slice(150:300), aes(x= age, y = heart_health)) + 
+  geom_point() + 
+  labs(x = 'Age',
+       y = 'Heart Health Score') + 
+  theme_pubr()
+```
+
+## Data in the Social Sciences
+
+- Looks like a blob with sort of a suggestion of a relationship, rather than something really clear, doesn't it?
+- That's par for the course in the social sciences
+- Super-clear scatterplots are for relationships that are truly *bivariate*, i.e. $X$ explains $Y$ almost perfectly
+- If there's *a lot of other stuff going on*, i.e. unexplained parts, the data reflects that and looks more blobby
+- In the social sciences, there's ALWAYS a lot of other stuff going on
+
+## Binning
+
+- How can we calculate a conditional mean when there might only be one observation with a given $X$ value? Can't really estimate $E(Y|X=x)$ well if there's only one observation with $X = x$!
+- We'll need to group observations together
+- One way is binning - we'll rarely actually use this but it's good for demonstration
+- Cut up $X$ into bins, and take the average of $Y$ within each bin
+
+## Binning
+
+```{r, echo = TRUE}
+oster %>% filter(bmi < 100) %>%
+  mutate(bmi_cut = cut(bmi, 8)) %>% group_by(bmi_cut) %>%
+  summarize(vite = mean(heart_health, na.rm = TRUE)) %>%
+  mutate(vite = scales::number(vite, accuracy = .001)) %>%
+  rename(`BMI Bin` = bmi_cut,
+         `Heart Health Index` = vite) 
+```
+
+## Binning
+
+- Any guesses why that last bin is weird?
+
+```{r}
+oster %>% filter(bmi < 100) %>%
+  #sample_n(500) %>%
+  ggplot(aes(x = bmi, y = heart_health)) + 
+  geom_point(alpha = .4) +
+  geom_step(data =  oster %>%
+                      filter(bmi < 100) %>%
+                      mutate(bmi_cut = cut(bmi, 8)) %>%
+                      group_by(bmi_cut) %>%
+                      summarize(`Heart Health Index` = mean(heart_health, na.rm = TRUE), bmi = min(bmi)),
+            mapping = aes(x = bmi, y = `Heart Health Index`), 
+            size = 2, color = 'red') + 
+  scale_y_continuous(limits = c(-5,5)) +
+  labs(x = 'Body Mass Index', y = 'Heart Health Index',
+       caption = 'Outliers on the y-axis not pictured to allow zoom-in') + 
+  theme_pubr()
+```
+
+## Binning
+
+- Doing this binning thing tells us the average of $Y$ within certain defined ranges of $X$, letting us estimate the population $E(Y | X \in [StartofBin,EndofBin])$
+- So I can get $E(Y|X=x)$ by just seeing which bin $x$ is in
+- Of course, this is a bit arbitrary and strange - where do the bin definitions come from, how close should we make them, and is it really reasonable to see big jumps going from the edge of one bin to another?
+
+## Local Means
+
+- Another approach is to take *local expectations*
+- Same binning idea, but we define the bin in a *rolling* manner
+- For each value $x$, use a bin *centered on that $x$* (perhaps weighting closer values more highly)
+- This gives us a smooth estimate (no jumps!) and while we still have decisions to make (width of bin, weights), it's less arbitrary
+- If we fit a quadtratic shape at each of those points, that's a LOESS (Locally Estimated Scatterplot Smoothing)
+
+## LOESS
+
+```{r, echo = TRUE, eval = FALSE}
+oster %>% filter(bmi < 100) %>%
+  ggplot(aes(x = bmi, y = heart_health)) + 
+  geom_point(alpha = .4) +
+  geom_smooth(size = 2, color = 'red', se = FALSE) +
+  scale_y_continuous(limits = c(-5,5)) +
+  labs(x = 'Body Mass Index', y = 'Heart Health Index',
+       caption = 'Outliers on the y-axis omitted to allow zoom-in') + 
+  theme_pubr()
+```
+
+## LOESS
+
+```{r}
+oster %>% filter(bmi < 100) %>%
+  ggplot(aes(x = bmi, y = heart_health)) + 
+  geom_point(alpha = .4) +
+  geom_smooth(size = 2, color = 'red', se = FALSE) +
+  scale_y_continuous(limits = c(-5,5)) +
+  labs(x = 'Body Mass Index', y = 'Heart Health Index',
+       caption = 'Outliers on the y-axis omitted to allow zoom-in') + 
+  theme_pubr()
+```
+
+## LOESS
+
+Benefits of LOESS:
+
+- Nonparametric
+- Easy to understand
+
+Downsides:
+
+- Difficult to use to sum up a relationship
+- Or try to uncover population relationships
+
+## Regression
+
+- This brings us to regression!
+- Regression takes the *idea* behind a LOESS curve - use a line to represent the conditional mean at each value of $X$, smoothing over gaps between the $X$'s - and generalizes it using a *shape*
+- Regression is the process of fitting a line to data, *and requiring that that line holds a particular shape*
+- In basic forms of regression, that shape is a straight line
+- (You can make it a bit curvy by adding polynomial terms)
+
+## Linear Regression
+
+```{r, echo = TRUE, eval = FALSE}
+oster %>% filter(bmi < 100) %>%
+  ggplot(aes(x = bmi, y = heart_health)) + 
+  geom_point(alpha = .4) +
+  geom_smooth(size = 2, color = 'red', se = FALSE, method = 'lm') +
+  scale_y_continuous(limits = c(-5,5)) +
+  labs(x = 'Body Mass Index', y = 'Heart Health Index',
+       caption = 'Outliers on the y-axis omitted to allow zoom-in') + 
+  theme_pubr()
+```
+
+## Linear Regression
+
+```{r}
+oster %>% filter(bmi < 100) %>%
+  ggplot(aes(x = bmi, y = heart_health)) + 
+  geom_point(alpha = .4) +
+  geom_smooth(size = 2, color = 'red', se = FALSE, method = 'lm') +
+  scale_y_continuous(limits = c(-5,5)) +
+  labs(x = 'Body Mass Index', y = 'Heart Health Index',
+       caption = 'Outliers on the y-axis omitted to allow zoom-in') + 
+  theme_pubr()
+```
+
+## Line-Fitting
+
+$$ Y = \beta_0 + \beta_1X + \varepsilon $$
+
+Pros:
+
+- $\beta_1$ is a lot easier to interpret than continuously changing local means
+- We can extrapolate to areas of $X$ where we have no observations (but don't go beyond edge of data!)
+- We understand the sampling distribution of $\hat{\beta}_1$
+
+Cons:
+
+- If we don't use the *right shape* the results will be bad
+- We may toss out some interesting information that doesn't fit the shape
+
+## Line-Fitting
+
+- Easy interpretation: a one-unit change in $X$ is **associated with** a $\beta_1$-unit change in $Y$
+- (If we've *identified a causal effect* then a one-unit change in $X$ **causes** a $\beta_1$-unit change in $Y$ )
+- $\hat{\beta}_1$ follows a normal distribution (or nearly so, if $\varepsilon$ isn't normal), so easy to do hypothesis tests
+- Eight million notes and details to go over that we won't today, but they'll come up, and you hopefully covered some in econometrics!
+
+## Line-Fitting
+
+Running a regression. This sees whether restaurant chains with more locations get higher/lower health inspection scores:
+
+```{r, echo = TRUE, eval = FALSE}
+df <- read_csv('restaurant_data.csv')
+
+m1 <- lm(inspection_score ~ NumberofLocations, data = df)
+
+library(modelsummary)
+msummary(m1, stars = TRUE)
+```
+
+## Interpret!
+
+```{r, echo = FALSE, eval = TRUE}
+df <- read_csv('restaurant_data.csv')
+
+m1 <- lm(inspection_score ~ NumberofLocations, data = df)
+
+library(modelsummary)
+msummary(m1, stars = TRUE)
+```
+
+
+## Conditional Conditional Means
+
+- The other bonus regression gives us is the ability to add *control variables*
+
+$$ Y = \beta_0 + \beta_1X + \beta_2Z + \varepsilon $$
+
+- This gives us a "conditional conditional mean", i.e. "the conditional mean of $Y$ given $X$, conditional on $Z$ "
+- "What is the part of the relationship between $X$ and $Y$ that is not explained by differences in $Z$?"
+
+## Conditional Conditional Means
+
+- Adding a control *removes the part of $X$ that is explained by $Z$* and also *removes the part of $Y$ that is explained by $Z$*
+- What's left over is the unrelated parts, and we can see how those unrelated parts relate
+- This is demonstrated most cleanly by the Frisch-Waugh-Lovell theorem
+- (this also extends to more than one control)
+
+## Conditional Conditional Means
+
+```{r, echo = TRUE, eval = FALSE}
+m2 <- lm(inspection_score ~ NumberofLocations + Year, data = df)
+
+df <- df %>%
+  mutate(inspection_score_res = resid(lm(inspection_score ~ Year)),
+         NumberofLocations_res = resid(lm(NumberofLocations ~ Year)))
+
+m3 <- lm(inspection_score_res ~ NumberofLocations_res, data = df)
+
+msummary(list(m2, m3), stars = TRUE, fmt = 5,
+         gof_omit = 'AIC|BIC|Lik')
+```
+
+## Conditional Conditional Means
+
+```{r, echo = FALSE, eval = TRUE}
+m2 <- lm(inspection_score ~ NumberofLocations + Year, data = df)
+
+df <- df %>%
+  mutate(inspection_score_res = resid(lm(inspection_score ~ Year)),
+         NumberofLocations_res = resid(lm(NumberofLocations ~ Year)))
+
+m3 <- lm(inspection_score_res ~ NumberofLocations_res, data = df)
+
+msummary(list(m2, m3), stars = TRUE, fmt = 5,
+         gof_omit = 'AIC|BIC|Lik')
+```
+
+## Regression Command Notes
+
+```{r, eval = FALSE, echo = TRUE}
+# Predictions and residuals
+pred <- predict(m3); res <- resid(m3)
+# Polynomials
+m4 <- lm(inspection_score ~ Year + I(Year^2), data = df)
+# Interactions (* includes both by themselves as well as interacted)
+m5 <- lm(inspection_score ~ NumberofLocations*Weekend, data = df)
+# Getting average marginal effects when you have interactions or polynomials
+library(margins)
+margins(m4, at = list(Year = 2009)) %>% summary()
+margins(m5, at = list(Weekend = TRUE)) %>% summary()
+```
+
+## Regression Command Notes
+
+```{r, eval = FALSE, echo = TRUE}
+# Logit
+m6 <- glm(Weekend ~ Year + NumberofLocations, data = df, family = binomial(link = 'logit'))
+# Average marginal effects from logit
+margins(m6) %>% summary()
+# Heteroskedasticity-robust standard errors 
+# (currently poking modelsummary author to improve this syntax)
+msummary(list(m4,m5,m6), vcov = 'robust', stars = TRUE)
+```
+
+## Interactions
+
+- We'll be using interactions a lot. They're very common in causal inference models, usually at least one of the interacted variables is binary (phew!)
+- Let's be sure we can interpret them properly!
+- Think about what coefficients are being multiplied by $X$ when $D = 0$ and when $D = 1$
+- And how much the effect of $X$ goes up by switching $D=0$ to $D = 1$!
+
+$$ Y = \beta_0 + \beta_1X + \beta_2D + \beta_3DX + \varepsilon $$
+
+## Interactions
+
+- Coefficient on $X$ alone: effect of $X$ when $D = 0$
+- Coefficient on interaction alone: how much stronger the effect of $X$ is for $D = 1$ than for $D = 0$
+- $\beta_1 + \beta_3$: effect of $X$ when $D = 1$
+- With interactions (or polynomials), you need to consider *all the related coefficients at once*, not on their own
+
+## Interactions
+
+Interpret!
+
+```{r, echo = FALSE}
+m5 <- lm(inspection_score ~ NumberofLocations*Weekend, data = df)
+msummary(m5, stars = TRUE,
+         gof_omit = 'AIC|BIC|Lik')
+```
+
+## Practice
+
+- Install (if you haven't) and load the packages **tidyverse, vtable, modelsummary, sandwich**
+- Load the `storms` data set with `data(storms)`
+- Use `sumtable` to look at the data. Pick a few numbers you see and use that number in a descriptive sentence (i.e. "the mean of the distribution of... is...")
+
+## Practice
+
+- Use `ggplot(storms, aes(x = SOMETHING))` `+ geom_density()` to look at the distribution of a numeric variable
+- Use `ggplot(storms, aes(x = SOMETHING))` `+ geom_bar()` to look at the distribution of a categorical variable
+- Use `mutate()` to create a variable `Hurricane = status == 'hurricane'`
+- Then...
+
+## Practice
+
+- Run a regression of `pressure` on `year` and `Hurricane`, and then another with the interaction between them
+- Use `msummary()` to show both regressions on a table, with heteroskedasticity-robust SEs
+- Interpret each coefficient in the table in a sentence (including one of the intercepts!)
+
+## Practice Answers (for the code parts)
+
+```{r, echo = TRUE, eval = FALSE}
+library(tidyverse); library(vtable); library(modelsummary); library(sandwich)
+data(storms)
+# st is short for sumtable, works too!
+st(storms)
+ggplot(storms, aes(x = wind)) + geom_density() + ggpubr::theme_pubr()
+ggplot(storms, aes(x = status)) + geom_bar() + ggpubr::theme_pubr()
+storms <- storms %>% mutate(Hurricane = status == 'hurricane')
+```
+
+## Practice Answers (for the code parts)
+
+```{r, echo = TRUE, eval = FALSE}
+m1 <- lm(pressure ~ year + Hurricane, data = storms)
+m2 <- lm(pressure ~ year*Hurricane, data = storms)
+msummary(list(m1, m2), stars = TRUE, statistic_override = vcovHC)
+```
+
+## Practice Answers
+
+```{r}
+library(tidyverse); library(vtable); library(modelsummary); library(sandwich)
+data(storms)
+# st is short for sumtable, works too!
+storms <- storms %>% mutate(Hurricane = status == 'hurricane')
+
+m1 <- lm(pressure ~ year + Hurricane, data = storms)
+m2 <- lm(pressure ~ year*Hurricane, data = storms)
+msummary(list(m1, m2), stars = TRUE, statistic_override = vcovHC,
+         gof_omit = 'AIC|BIC|Lik')
+
+```
+
+
+## Practice Answers (interpretation!)
+
+Model 1:
+
+- If it's not a hurricane and it's in year 0, we predict pressure of 1294.063
+- Hurricanes have pressure 33.176 lower than non-hurricanes
+- Pressure drops by .146 each year
+
+Model 2:
+
+- Among non-hurricanes, pressure drops by .09 each year
+- In year 0, hurricanes have pressure 356.178 higher than non-hurricanes
+- Pressure drops by .195 *more* every year for hurricanes than non-hurricanes

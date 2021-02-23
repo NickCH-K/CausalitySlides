@@ -1,0 +1,533 @@
+---
+title: "Lecture 5 Causal Diagrams"
+author: "Nick Huntington-Klein"
+date: "`r Sys.Date()`"
+output:   
+  revealjs::revealjs_presentation:
+    theme: solarized
+    transition: slide
+    self_contained: true
+    smart: true
+    fig_caption: true
+    reveal_options:
+      slideNumber: true
+    
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning=FALSE, message=FALSE)
+library(tidyverse)
+library(dagitty)
+library(ggdag)
+library(gganimate)
+library(ggthemes)
+library(Cairo)
+library(modelsummary)
+theme_set(theme_gray(base_size = 15))
+```
+
+## Recap
+
+- Last time we talked about identification
+- There's a theoretical concept we're trying to get at, and we want to pick out *just the variation* that represents that effect
+- We also talked about *how* we can identify causality in data
+- Part of that will necessarily require us to have a model
+
+## Models
+
+- We *have to have a model* to get at causality
+- A model is our way of *understanding the world*. It's our idea of what we think the data-generating process is
+- Models can be informal or formal - "The sun rises every day because the earth spins" vs. super-complex astronomical models of the galaxy with thousands of equations
+- All models are wrong. Even quantum mechanics. But as long as models are right enough to be useful, we're good to go!
+
+## Models 
+
+- Once we *do* have a model, though, that model will tell us *exactly* how we can find a causal effect
+- (if it's possible; sometimes the model says that to identify we must do something impossible)
+- Just like Arteaga did, if we know a source of identified variation in how `X` was assigned, and using that information we were able to get a good estimate of the true treatment
+
+## Example
+
+- Let's work through a basic example where we know the data generating process
+
+```{r, echo=TRUE}
+# Is your company in tech? Let's say 30% of firms are
+df <- tibble(tech = sample(c(0,1),500,replace=T,prob=c(.7,.3))) %>%
+  #Tech firms on average spend $3mil more defending IP lawsuits
+  mutate(IP.spend = 3*tech+runif(500,min=0,max=4)) %>%
+  #Tech firms also have higher profits. But IP lawsuits lower profits
+  mutate(log.profit = 2*tech - .3*IP.spend + rnorm(500,mean=2))
+# Now let's check for how profit and IP.spend are correlated!
+cor(df$log.profit,df$IP.spend)
+```
+
+- Uh-oh! Truth is negative relationship, but data says positive!!
+
+## Example
+
+- Now we can ask: *what do we know* about this situation?
+- How do we suspect the data was generated? (ignoring for a moment that we know already)
+    - We know that being a tech company leads you to have to spend more money on IP lawsuits
+    - We know that being a tech company leads you to have higher profits
+    - We know that IP lawsuits lower your profits
+    
+## Example
+
+- From this, we realize that part of what we get when we calculate `cor(df$log.profit,df$IP.spend)` is the influence of being a tech company
+- Meaning that if we remove that influence, what's left over should be the actual, negative, effect of IP lawsuits
+- Now, we can get to this intuitively, but it would be much more useful if we had a more formal model that could tell us what to do in *lots* of situations
+
+## Causal Diagrams
+
+- Enter the causal diagram!
+- A causal diagram (aka a Directed Acyclic Graph) is a way of writing down your *model* that lets you figure out what you need to do to find your causal effect of interest
+- All you need to do to make a causal diagram is write down all the important features of the data generating process, and also write down what you think causes what!
+
+## Example
+
+- We know that being a tech company leads you to have to spend more money on IP lawsuits
+- We know that being a tech company leads you to have higher profits
+- We know that IP lawsuits lower your profits
+
+## Example
+
+- <span style="color:red">We know that being a tech company leads you to have to spend more money on IP lawsuits</span>
+- We know that being a tech company leads you to have higher profits
+- We know that IP lawsuits lower your profits
+
+```{r, dev='CairoPNG', echo=FALSE, fig.width=5, fig.height=3.5}
+dag <- dagify(IP.sp~tech) %>% tidy_dagitty()
+ggdag_classic(dag,node_size=20) + 
+  theme_dag_blank()
+```
+
+## Example
+
+- <span style="color:red">We know that being a tech company leads you to have to spend more money on IP lawsuits</span>
+- <span style="color:red">We know that being a tech company leads you to have higher profits</span>
+- We know that IP lawsuits lower your profits
+
+```{r, dev='CairoPNG', echo=FALSE, fig.width=5, fig.height=3.5}
+dag <- dagify(IP.sp~tech,
+              profit~tech) %>% tidy_dagitty()
+ggdag_classic(dag,node_size=20) + 
+  theme_dag_blank()
+```
+
+## Example
+
+- <span style="color:red">We know that being a tech company leads you to have to spend more money on IP lawsuits</span>
+- <span style="color:red">We know that being a tech company leads you to have higher profits</span>
+- <span style="color:red">We know that IP lawsuits lower your profits</span>
+
+```{r, dev='CairoPNG', echo=FALSE, fig.width=5, fig.height=3.5}
+dag <- dagify(IP.sp~tech,
+              profit~tech+IP.sp) %>% tidy_dagitty()
+ggdag_classic(dag,node_size=20) + 
+  theme_dag_blank()
+```
+
+## Voila
+
+- We have *encoded* everything we know about this particular little world in our diagram
+- (well, not everything, the diagram doesn't say whether we think these effects are positive or negative)
+- Not only can we see our assumptions, but we can see how they fit together
+- For example, if we were looking for the impact of *tech* on profit, we'd know that it happens directly, AND happens because tech affects `IP.spend`, which then affects profit.
+
+## Identification
+
+- And if we want to isolate the effect of `IP.spend` on `profit`, we can figure that out too
+- We're *identifying* just one of those arrows, the one `IP.spend -> profit`, and seeing what the effect is on that arrow!
+- **If we can shut down the other arrows, there's only one path you can walk on the diagram to get from treatment or outcome-only one kind of variation left, and it MUST be the causal effect you want**
+
+## Identification
+
+- Based on this graph, we can see that part of the correlation between `IP.Spend` and `profit` can be *explained by* how `tech` links the two.
+
+```{r, dev='CairoPNG', echo=FALSE, fig.width=5, fig.height=3.5}
+dag <- dagify(IP.sp~tech,
+              profit~tech+IP.sp) %>% tidy_dagitty()
+ggdag_classic(dag,node_size=20) + 
+  theme_dag_blank()
+```
+
+## Identification
+
+- Since we can *explain* part of the correlation with `tech`, but we want to *identify* the part of the correlation that ISN'T explained by `tech` (the causal part), we will want to just use what isn't explained by tech!
+    - Use `tech` to explain `profit`, and take the residual
+    - Use `tech` to explain `IP.spend`, and take the residual
+    - The relationship between the first residual and the second residual is *causal*!
+
+## Controlling
+
+- This process is called "adjusting" or "controlling". We are "controlling for `tech`" and taking out the part of the relationship that is explained by it
+- (By Frisch-Waugh-Lovell, we can get the same result with a regression where we include `tech` as a control)
+- In doing so, we're looking at the relationship between `IP.spend` and `profit` *just comparing firms that have the same level of `tech`*. 
+- This is our "apples to apples" comparison that gives us an experiment-like result
+
+## Controlling
+
+```{r, echo=TRUE, eval=TRUE}
+df <- df %>% group_by(tech) %>%
+  mutate(log.profit.resid = log.profit - mean(log.profit),
+         IP.spend.resid = IP.spend - mean(IP.spend)) %>% ungroup()
+cor(df$log.profit.resid,df$IP.spend.resid)
+```
+
+- Negative! Hooray
+
+## Controlling
+
+- The same idea:
+
+```{r, echo = TRUE, eval = FALSE}
+m1 <- lm(log.profit ~ IP.spend, data = df)
+m2 <- lm(log.profit ~ IP.spend + tech, data = df)
+msummary(list(m1,m2), stars = TRUE, gof_omit = 'AIC|BIC|Lik|Adj.|F')
+```
+## Controlling
+
+```{r}
+m1 <- lm(log.profit ~ IP.spend, data = df)
+m2 <- lm(log.profit ~ IP.spend + tech, data = df)
+msummary(list(m1,m2), stars = TRUE, gof_omit = 'AIC|BIC|Lik|Adj.|F')
+```
+
+
+## Controlling
+
+- Imagine we're looking at that relationship *within color*
+
+```{r, dev='CairoPNG', echo=FALSE,fig.height=5.5,fig.width=8}
+ggplot(mutate(df,tech=factor(tech,labels=c("Not Tech","Tech"))),
+              aes(x=IP.spend,y=log.profit,color=tech))+geom_point()+  guides(color=guide_legend(title="Firm Type"))+
+  scale_color_colorblind()
+```
+
+## LITERALLY
+
+```{r, dev='CairoPNG', echo=FALSE,fig.height=5.5,fig.width=5.5}
+df <- df %>% 
+  group_by(tech) %>%
+  mutate(mean_profit = mean(log.profit),
+         mean_IP = mean(IP.spend)) %>% ungroup()
+
+before_cor <- paste("1. Raw data. Correlation between log.profit and IP.spend: ",round(cor(df$log.profit,df$IP.spend),3),sep='')
+after_cor <- paste("6. Analyze what's left! cor(log.profit,IP.spend) controlling for tech: ",round(cor(df$log.profit-df$mean_profit,df$IP.spend-df$mean_IP),3),sep='')
+
+
+
+
+#Add step 2 in which IP.spend is demeaned, and 3 in which both IP.spend and log.profit are, and 4 which just changes label
+dffull <- rbind(
+  #Step 1: Raw data only
+  df %>% mutate(mean_IP=NA,mean_profit=NA,time=before_cor),
+  #Step 2: Add x-lines
+  df %>% mutate(mean_profit=NA,time='2. Figure out what differences in IP.spend are explained by tech'),
+  #Step 3: IP.spend de-meaned 
+  df %>% mutate(IP.spend = IP.spend - mean_IP,mean_IP=0,mean_profit=NA,time="3. Remove differences in IP.spend explained by tech"),
+  #Step 4: Remove IP.spend lines, add log.profit
+  df %>% mutate(IP.spend = IP.spend - mean_IP,mean_IP=NA,time="4. Figure out what differences in log.profit are explained by tech"),
+  #Step 5: log.profit de-meaned
+  df %>% mutate(IP.spend = IP.spend - mean_IP,log.profit = log.profit - mean_profit,mean_IP=NA,mean_profit=0,time="5. Remove differences in log.profit explained by tech"),
+  #Step 6: Raw demeaned data only
+  df %>% mutate(IP.spend = IP.spend - mean_IP,log.profit = log.profit - mean_profit,mean_IP=NA,mean_profit=NA,time=after_cor))
+
+p <- ggplot(dffull,aes(y=log.profit,x=IP.spend,color=as.factor(tech)))+geom_point()+
+  geom_vline(aes(xintercept=mean_IP,color=as.factor(tech)))+
+  geom_hline(aes(yintercept=mean_profit,color=as.factor(tech)))+
+  guides(color=guide_legend(title="tech"))+
+  scale_color_colorblind()+
+  labs(title = 'The Relationship between log.profit and IP.spend, Controlling for tech \n{next_state}')+
+  theme_minimal() +
+  theme(plot.title = element_text(size=14))+
+  transition_states(time,transition_length=c(12,32,12,32,12,12),state_length=c(160,100,75,100,75,160),wrap=FALSE)+
+  ease_aes('sine-in-out')+
+  exit_fade()+enter_fade()
+
+animate(p,nframes=200)
+```
+
+## Recap
+
+- By controlling for `tech` ("holding it constant") we got rid of the part of the `IP.spend`/`profit` relationship that was explained by `tech`, and so managed to *identify* the $IP.spend \rightarrow profit$ arrow, the causal effect we're interested in!
+- We correctly found that it was negative
+- Remember, we made it truly negative when we created the data, all those slides ago
+
+## Causal Diagrams
+
+- And it was the diagram that told us to control for `tech`
+- It's going to turn out that diagrams can tell us how to identify things in much more complex circumstances - we'll get to that soon
+- But you might have noticed that it was pretty obvious what to do just by looking at the graph
+
+## Causal Diagrams
+
+- Can't we just look at the data to see what we need to control for?
+- After all, that would free us from having to make all those assumptions and figure out our model
+- No!!!
+- Why? Because for a given set of data that we see, there are *many* different data generating processes that could have made it
+- Each requiring different kinds of adjustments in order to get it right
+
+## Causal Diagrams
+
+- We observe that `profit` (y), `IP.spend` (x), and `tech` (z) are all related... which is it?
+
+```{r dev='CairoPNG', echo=FALSE, fig.width=8, fig.height=5}
+ggdag_equivalent_dags(confounder_triangle(x_y_associated=TRUE),node_size=12) + 
+  theme_dag_blank()
+```
+
+## Causal Diagrams
+
+- With only the data to work with we have *literally no way of knowing* which of those is true
+- Maybe `IP.spend` causes companies to be `tech` companies (in 2, 3, 6)
+- We know that's silly because we have an idea of what the model is
+- But that's what lets us know it's wrong - what we know about the true model. With just the data we have no clue.
+
+## Practice
+
+Look at the diagram on the next page, intended to be a model of fertility decisions in Switzerland based on education and whether one comes from an agricultural family.
+
+Ask:
+
+1. What assumptions are in the graph?
+2. Assuming the graph is true, why are Education and Fertility related?
+3. Do any of the assumptions seem wrong?
+
+## Practice 
+
+```{r, dev='CairoPNG', echo=FALSE, fig.width=7, fig.height=5}
+dag <- dagify(Fertility ~ Income + Educ + Agric,
+              Income ~ Educ + Agric,
+              Educ ~ Agric) %>% tidy_dagitty()
+ggdag_classic(dag,node_size=20) + 
+  theme_dag_blank()
+```
+
+
+
+## Drawing DAGs
+
+- So that's what a DAG *is*. How do we *draw* one? 
+- This will require us to *understand* what is going on in the real world
+- (especially since we won't know the right answer, like when we simulate our own data!)
+- And then represent our understanding in the diagram
+
+## Remember
+
+- Our goal is to *represent the underlying data-generating process*
+- This is going to require some common-sense thinking
+- As well as some economic intuition
+- In real life, we're not going to know what the right answer is
+- Our models will be wrong. We just need them to be useful
+
+## Steps to a Causal Diagram
+
+1. Consider all the variables that are likely to be important in the data generating process (this includes variables you can't observe)
+2. For simplicity, combine them together or prune the ones least likely to be important
+3. Consider which variables are likely to affect which other variables and draw arrows from one to the other
+4. (Bonus: Test some implications of the model to see if you have the right one)
+
+## Some Notes
+
+- Drawing an arrow requires a *direction*. You're making a statement!
+- Omitting an arrow is a statement too - you're saying neither causes the other (directly)
+- If two variables are correlated but neither causes the other, that means they're both caused by some other (perhaps unobserved) variable that causes both - add it!
+- Remember, "cause" just means "changes the probability of". Not all people who go to Seattle U are Catholic, but being Catholic increases the probability of going to Seattle U, so a graph of Seattle U attendance would have $Catholic \rightarrow SeattleU$ on it
+
+## Some Notes
+
+- There shouldn't be any *cycles* - You shouldn't be able to follow the arrows in one direction and end up where you started
+- If there *should* be a feedback loop, like "rich get richer", distinguish between the same variable at different points in time to avoid it
+- A variable can take many values. So if sex affects something, you'd have $Sex$ as a single variable, not one for $Male$ and another for $Female$
+- Don't draw the DAG just so it will be easy to identify. Drawing the DAG does not make it so! The goal is to reflect the true omdel in the world
+    
+## So let's do it!
+
+- Let's start with an econometrics classic: what is the causal effect of an additional year of education on earnings?
+- That is, if we reached in and made someone get one more year of education than they already did, how much more money would they earn?
+
+## 1. Listing Variables
+
+- We can start with our two main variables of interest:
+    - Education [we call this the "treatment" or "exposure" variable]
+    - Earnings [the "outcome"]
+    
+## 1. Listing Variables
+
+- Then, we can add other variables likely to be relevant
+- Focus on variables that are likely to cause or be caused by treatment
+- ESPECIALLY if they're related both to the treatment and the outcome
+- They don't have to be things you can actually observe/measure
+- Variables that affect the outcome but aren't related to anything else aren't really important (you'll see why next week)
+
+## 1. Listing Variables
+
+- So what can we think of?
+    - Ability
+    - Socioeconomic status
+    - Demographics
+    - Phys. ed requirements
+    - Year of birth
+    - Location
+    - Compulsory schooling laws
+    - Job connections
+
+## 2. Simplify
+
+- There's a lot going on - in any social science system, there are THOUSANDS of things that could plausibly be in your diagram
+- So we simplify. We ignore things that are likely to be only of trivial importance [so Phys. ed is out!]
+- And we might try to combine variables that are very similar or might overlap in what we measure [Socioeconomic status, Demographics, Location -> Background]
+- Now: Education, Earnings, Background, Year of birth, Location, Compulsory schooling, and Job Connections
+
+## 3. Arrows!
+
+- Consider which variables are likely to cause which others
+- And, importantly, *which arrows you can leave out*
+- The arrows you *leave out* are important to think about - you sure there's no effect? - and prized! You need those NON-arrows to be able to causally identify anything.
+
+## 3. Arrows
+
+- Let's start with our effect of interest
+- Education causes earnings
+
+```{r, dev='CairoPNG', echo=FALSE, fig.width=7, fig.height=5}
+set.seed(1000)
+dag <- dagify(Earn~Ed) %>% tidy_dagitty()
+ggdag_classic(dag,node_size=20) + 
+  theme_dag_blank()
+```
+
+## 3. Arrows
+
+- Remaining: Background, Year of birth, Location, Compulsory schooling, and Job Connections
+- All of these but Job Connections should cause Ed
+
+```{r, dev='CairoPNG', echo=FALSE, fig.width=7, fig.height=5}
+set.seed(1000)
+dag <- dagify(Earn~Ed,
+              Ed~Bgrd+Year+Loc+Comp) %>% tidy_dagitty()
+ggdag_classic(dag,node_size=20) + 
+  theme_dag_blank()
+```
+
+## 3. Arrows
+
+- Seems like Year of Birth, Location, and Background should ALSO affect earnings. Job Connections, too.
+
+```{r, dev='CairoPNG', echo=FALSE, fig.width=7, fig.height=5}
+set.seed(1000)
+dag <- dagify(Earn~Ed+Bgrd+Year+Loc+JobCx,
+              Ed~Bgrd+Year+Loc+Comp) %>% tidy_dagitty()
+ggdag_classic(dag,node_size=20) + 
+  theme_dag_blank()
+```
+
+## 3. Arrows
+
+- Job connections, in fact, seems like it should be caused by Education
+
+```{r, dev='CairoPNG', echo=FALSE, fig.width=7, fig.height=5}
+set.seed(1000)
+dag <- dagify(Earn~Ed+Bgrd+Year+Loc+JobCx,
+              Ed~Bgrd+Year+Loc+Comp,
+              JobCx~Ed) %>% tidy_dagitty()
+ggdag_classic(dag,node_size=20) + 
+  theme_dag_blank()
+```
+
+## 3. Arrows
+
+- Location and Background are likely to be related, but neither really causes the other. Make unobservable U1 and have it cause both!
+
+```{r, dev='CairoPNG', echo=FALSE, fig.width=7, fig.height=5}
+set.seed(1000)
+dag <- dagify(Earn~Ed+Bgrd+Year+Loc+JobCx,
+              Ed~Bgrd+Year+Loc+Comp,
+              JobCx~Ed,
+              Loc~U1,
+              Bgrd~U1) %>% tidy_dagitty()
+ggdag_classic(dag,node_size=20) + 
+  theme_dag_blank()
+```
+
+## Causal Diagrams
+
+- And there we have it!
+- Perhaps a little messy, but that can happen
+- We have modeled our idea of what the data generating process looks like
+
+## Dagitty.net
+
+- These graphs can be drawn by hand
+- Or we can use a computer to help
+- We will be using dagitty.net to draw these graphs
+- (You can also draw them with R code - see the slides, but you won't need to know this)
+
+## Dagitty.net
+
+- Go to dagitty.net and click on "Launch"
+- You will see an example of a causal diagram with nodes (variables) and arrows
+- Plus handy color-coding and symbols. Green triangle for exposure/treatment, and blue bar for outcome.
+- The green arrow is the "causal path" we'd like to *identify*
+
+## Dagitty.net
+
+- Go to Model and New Model
+- Let's recreate our Education and Earnings diagram
+- Put in Education as the exposure and Earnings as the outcome (you can use longer variable names than we've used here)
+
+## Dagitty.net
+
+- Double-click on blank space to add new variables.
+- Add all the variables we're interested in.
+
+```{r, dev='CairoPNG', echo=FALSE, fig.width=7, fig.height=5}
+set.seed(1000)
+dag <- dagify(Earn~Ed+Bgrd+Year+Loc+JobCx,
+              Ed~Bgrd+Year+Loc+Comp,
+              JobCx~Ed,
+              Loc~U1,
+              Bgrd~U1) %>% tidy_dagitty()
+ggdag_classic(dag,node_size=20) + 
+  theme_dag_blank()
+```
+
+## Dagitty.net
+
+- Then, double click on some variable `X`, then once on another variable `Y` to get an arrow for `X -> Y`
+- Fill in all our arrows!
+
+```{r, dev='CairoPNG', echo=FALSE, fig.width=7, fig.height=5}
+set.seed(1000)
+dag <- dagify(Earn~Ed+Bgrd+Year+Loc+JobCx,
+              Ed~Bgrd+Year+Loc+Comp,
+              JobCx~Ed,
+              Loc~U1,
+              Bgrd~U1) %>% tidy_dagitty()
+ggdag_classic(dag,node_size=20) + 
+  theme_dag_blank()
+```
+
+## Dagitty.net
+
+- Feel free to move the variables around with drag-and-drop to make it look a bit nicer
+- You can even drag the arrows to make them curvy
+
+## Practice
+
+- Consider the causal question "does a longer night's sleep extend your lifespan?"
+
+1. List variables [think especially hard about what things might lead you to get a longer night's sleep]
+2. Simplify
+3. Arrows
+
+- Then, when you're done, draw it in Dagitty.net!
+
+## Causal Inference in the News
+
+- Not long: 1-2 pages single-spaced plus diagram.
+- Find a news article that makes a causal claim (like the one we just did, but not that one) and interpret that claim by drawing an appropriate diagram in dagitty
+- Doesn't necessarily need to be a claim backed by a study or evidence, but it makes the assignment easier if it is
+- Justify your diagram (both your choice of variables and your arrows)
+- Explain how you would identify the causal claim, and discuss whether you think the article did so or not.

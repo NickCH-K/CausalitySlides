@@ -1,0 +1,349 @@
+---
+title: "Lecture 19 Treatment Effect Methods and Review"
+author: "Nick Huntington-Klein"
+date: "`r Sys.Date()`"
+output:   
+  revealjs::revealjs_presentation:
+    theme: solarized
+    transition: slide
+    self_contained: true
+    smart: true
+    fig_caption: true
+    reveal_options:
+      slideNumber: true
+    
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning=FALSE, message=FALSE)
+library(tidyverse)
+library(dagitty)
+library(ggdag)
+library(gganimate)
+library(ggthemes)
+library(ggpubr)
+library(modelsummary)
+library(fixest)
+library(Cairo)
+theme_set(theme_gray(base_size = 15))
+```
+
+## Some Pointers
+
+- Last time we talked about heterogeneous treatment effects and how our methods produce different averages of those effects
+- But we don't need to be limited to that!
+- There are plenty of methods - many of them new - that let us estimate a *distribution* of treatment effects
+- We won't be going super far into detail with them, but I'll mostly just be letting you know they exist and some pointers for looking further
+- I'll favor pointers to packages over papers, but if you look in the help files you'll generally find paper citations
+
+## Sorted Effects
+
+- The *sorted effects* method uses covariates to look at variation in the treatment effect, and produces a distribution of treatment effects
+- It also lets you see *who* is at each part of the distribution
+
+```{r, echo = TRUE, results='hide'}
+library(SortedEffects)
+# Data on being denied for a mortgage.
+data(mortgage)
+# Save the formula to reuse later
+fm <- deny ~ black + p_irat + hse_inc + ccred + mcred + pubrec + ltv_med + 
+           ltv_high + denpmi + selfemp + single + hischl
+# spe() for "Sorted Partial Effects"
+m <- spe(fm, data = mortgage,
+         var = 'black', # black is the treatment variable
+         method = 'logit',
+         us = c(2:98)/100, # Get the distribution from the 2nd to 98th percentile
+         b = 500, bc = TRUE) # Use bootstrapped SEs and bias-correction 
+```
+
+## Sorted Effects
+
+- See the distribution in the effect of black on being denied
+
+```{r, echo = FALSE}
+plot(x = m)
+```
+
+## Sorted Effects
+
+- Who is most and least affected by the "treatment" of being black?
+
+```{r, echo = TRUE}
+t <- c("deny", "p_irat", "black", "hse_inc", "ccred", "mcred", "pubrec",
+       "denpmi", "selfemp", "single", "hischl", "ltv_med", "ltv_high")
+classify <- ca(fm, t = t, data = mortgage, var = 'black', method = 'logit',
+               cl = 'both', # Get WHO the most and least are, not how different they are
+               b = 500, bc = TRUE)
+results <- summary(classify) %>%
+  as_tibble() %>%
+  mutate(Group = row.names(summary(classify)),
+         Ratio = Most/Least) %>%
+  select(Group, Most, Least, Ratio) %>%
+  arrange(Ratio)
+```
+
+## Sorted Effects
+
+- Those who were denied for insurance (`denpmi`) had smallest effects of `black`, those who were `single` had the biggest
+
+```{r, echo = FALSE}
+knitr::kable(results)
+```
+
+## Bayesian Hierarchical Modeling
+
+- A very old method! But it works. An extension of random effects
+- Instead of just letting the *constant* vary, let *any* coefficient vary, and give each its own function to vary over controls! Those controls can let the effect vary
+
+$$ Y = \beta_0 + \beta_1X + \varepsilon $$
+$$ \beta_0 = \gamma_{00} + \nu_{00} $$
+$$ \beta_1 = \gamma_{10} + \gamma_{11}W + \nu_{01} $$
+
+- Terminology difference: "fixed effects" means "coefficients that don't vary"
+
+## Bayesian Hierarchical Modeling
+
+```{r, echo = TRUE}
+library(lme4)
+# The whole thing would be super slow so for now let's just do a few effects
+m <- lmer(deny ~ p_irat + hse_inc + ccred + mcred + pubrec + ltv_med + 
+           ltv_high + denpmi + selfemp + single + hischl +
+       (single + hischl | black),
+     data = mortgage)
+```
+
+## Bayesian Hierarchical Modeling (cut off)
+
+```{r, echo = FALSE}
+summary(m)
+```
+
+## Machine Learning
+
+- The biggest contributions of machine learning to causal inference thus far have been in heterogeneous treatment effects
+- (there are other things too, like matrix completion, which is way too complex to get into here)
+- Allowing a zillion different things to vary is easy in machine learning!
+- Note: machine learning tends to use "training" and "holdout" data. So estimate the model using a training subset, and then estimate your treatment effect distribution by sending your holdout data through that model
+
+## LASSO and interactions
+
+- LASSO is a "regularized regression" that does regression but doesn't JUST minimize sum of squared errors, it also has a second goal of shrinking coefficients
+- There are several forms of regularized regression. LASSO tends to set coefficeints to 0, i.e. chuck them out
+- So... just interact treatment with everything and see what interactions are worth keeping!
+
+## LASSO and interactions
+
+- This is commonly applied in instrumental variables settings, where these interactions can improve first-stage power and ease the weak-instrument problem
+- But can be applied elsewhere too to find variation in a treatment effect
+- I won't do a walkthrough here, but the package **glmnet** is typically used to estimate LASSO. See [this walkthrough](https://www.statology.org/lasso-regression-in-r/).
+
+## Causal Forest
+
+- A *random forest* is a prediction method. Take your data, go through every covariate you have, and every \emph{value} of each covariate, and split the data based on the split that minimizes sum of squared error
+- Then do that again for each of the splits, and again and again. Each time only use a random subset of the variables
+- Stop once the splits get too small
+- *Causal forest* does the exact same thing except instead of minimizing the SSE, it *maximizes* the difference in causal effect between the splits
+- i.e. it hunts for causal effect differences! You end up with an effect prediction for each individual
+
+## Causal Forest
+
+- **grf** does causal forest, and even has an IV version if you need an IV to identify
+
+```{r, echo = TRUE}
+library(grf)
+mortgage <- mortgage %>% mutate(holdout = runif(n()) > .5)
+holdout <- mortgage %>% filter(holdout)
+training <- mortgage %>% filter(!holdout)
+W = training %>% pull(black) %>% as.matrix()
+X = training %>% select(p_irat, hse_inc, ccred, mcred, pubrec,
+       denpmi, selfemp, single, hischl, ltv_med, ltv_high) %>% as.matrix()
+Y = training %>% pull(deny) %>% as.matrix()
+m <- causal_forest(X, Y, W, tune.parameters = 'alpha')
+```
+
+## Causal Forest
+
+```{r, echo = TRUE}
+X.holdout <- holdout %>% select(p_irat, hse_inc, ccred, mcred, pubrec,
+       denpmi, selfemp, single, hischl, ltv_med, ltv_high) %>% as.matrix()
+indiv_effects <- predict(m, X.holdout)
+holdout <- holdout %>% mutate(effect = indiv_effects$predictions)
+```
+
+## Causal Forest
+
+```{r, echo = FALSE}
+ggplot(as_tibble(holdout), aes(x = effect)) + geom_density() + 
+  theme_pubr() + 
+  labs(x = 'Individual Effect of Black on Denial Probability',
+       y = 'Density')
+```
+
+## Causal Forest
+
+- Who is affected? Let's do a similar test to what **SortedEffects** did (although we could look at it plenty of other ways)
+
+```{r}
+holdout %>%
+  mutate(Range = case_when(
+    effect <= quantile(effect, .05) ~ 'Bottom',
+    effect >= quantile(effect, .95) ~ 'Top',
+    TRUE ~ NA_character_
+  )) %>%
+  filter(!is.na(Range)) %>%
+  group_by(Range) %>%
+  select(Range, p_irat, black, hse_inc, ccred, mcred, pubrec,
+       denpmi, selfemp, single, hischl, ltv_med, ltv_high) %>%
+  summarize(across(.fns = mean)) %>%
+  pivot_longer(cols = 2:13) %>%
+  pivot_wider(id_cols = name, values_from = value, names_from = Range) %>%
+  mutate(Ratio = Top/Bottom) %>%
+  arrange(Ratio) %>%
+  knitr::kable()
+```
+
+## Treatment Effect Methods
+
+- Anyway, there's some stuff for you to check out!
+- Obviously there are zillions of causal-inference methods we don't have time to cover
+- Bartik instruments, matrix completion, causal discovery, and so on and so on and so on
+- Consider this a good starting place
+
+## Exam Review
+
+- Just a reminder of some stuff we've covered
+
+## Fixed Effects
+
+- If we have data where we observe the same people over and over, we can implement *fixed effects* by controlling for *individual*
+- This accounts for everything that's constant within individual. If, for example, "individual" was city, that would include geography, state, founding year, etc.
+- Doesn't account for things that vary within individual over time, like `Laws`
+
+## Difference-in-Difference
+
+- Difference-in-Difference applies when you have a group that you can observe both before and after the policy
+- You worry that `time` is a confounder, but you can't control for it
+- Unless you add a control group that DIDN'T get the policy
+- We must be careful to check that parallel trends holds
+
+## Difference-in-Difference
+
+```{r, dev='CairoPNG', echo=FALSE, fig.width=7, fig.height=5.5}
+dag <- dagify(D~Group+Time,
+              Y~Group+Time+D,
+              coords=list(
+                x=c(D=0,Group=1,Time=1,Y=2),
+                y=c(D=1,Group=0,Time=2,Y=1)
+              )) %>% tidy_dagitty()
+ggdag_classic(dag,node_size=20) + 
+  theme_dag_blank()
+```
+
+## Difference-in-Difference
+
+- Get the before-after difference for both groups
+- Then subtract out the difference for the control
+
+```{r, echo=TRUE}
+diddata <- tibble(Group=c(rep("C",2500),rep("T",2500)),
+                  Time=rep(c(rep("Before",1250),rep("After",1250)),2)) %>%
+  mutate(Treated = (Group == "T") & Time == "After") %>%
+  mutate(Y = 2*(Group == "T") + 1.5*(Time == "After") + 3*Treated + rnorm(5000))
+did <- diddata %>% group_by(Group,Time) %>% summarize(Y = mean(Y))
+before.after.control <- did$Y[1] - did$Y[2]
+before.after.treated <- did$Y[3] - did$Y[4]
+did.effect <- before.after.treated - before.after.control
+did.effect
+m <- feols(Y ~ Treated | Group + Time, data = diddata)
+coef(m)
+```
+
+## Regression Discontinuity
+
+- If we have a treatment `D` that is assigned based on a cutoff in a running variable, we can use regression discontinuity
+- Focus right around the cutoff and compare above-cutoff to below-cutoff
+- We've isolated a great set of treatment/control groups because in this area it's basically random whether you're above or below the cutoff
+
+## Regression Discontinuity
+
+```{r, dev='CairoPNG', echo=FALSE, fig.width=7, fig.height=5.5}
+dag <- dagify(D~Above+W,
+              Above~Run,
+              Run~W,
+              Y~D+Run+W,
+              coords=list(
+                x=c(D=1,Above=2,W=3,Run=3,Y=4),
+                y=c(D=1,Above=1.25,W=2,Run=1.25,Y=.5)
+              )) %>% tidy_dagitty()
+ggdag_classic(dag,node_size=20) + 
+  theme_dag_blank()
+```
+
+## Regression Discontinuity
+
+- Estimate by fitting a line that jumps at the cutoff and estimating the jump
+- Use local regression and bandwidths to avoid being affected by far-away observations
+- "Fuzzy" designs where treatment only jumps partially scale the effect using IV
+
+## Regression Discontinuity
+
+- Expressed well in graphs! Treatment should jump at cutoff. If not perfectly from 0% to 100%, use IV too
+
+```{r, dev='CairoPNG', echo=FALSE, fig.width=7, fig.height=5}
+rdddata <- tibble(W=rnorm(10000)) %>%
+  mutate(run = runif(10000)+.03*W) %>%
+  mutate(treated = run >= .6) %>%
+  mutate(Y = 2+.01*run+.5*treated+W+rnorm(10000))
+ggplot(rdddata,aes(x=run,y=Y,color=treated)) + geom_point()+
+  geom_vline(aes(xintercept=.6))+
+  geom_smooth(aes(group = treated), size = 2, color = 'black') +
+  labs(x='Running Variable',
+       y='Outcome') + 
+  theme_pubr() + 
+  guides(color = FALSE)
+```
+
+## Regression Discontinuity
+
+- Variables other than `Y` and treatment shouldn't jump at cutoff - they should be balanced
+
+```{r, dev='CairoPNG', echo=FALSE, fig.width=7, fig.height=5}
+ggplot(rdddata,aes(x=run,y=W,color=treated)) + geom_point()+
+  geom_vline(aes(xintercept=.6))+
+  geom_smooth(aes(group = treated), size = 2, color = 'black') +
+  labs(x='Running Variable',
+       y='W') +
+   theme_pubr() + 
+  guides(color = FALSE)
+```
+
+## Instrumental Variables
+
+- An instrumental variable affects treatment (relevant) but has no back doors itself or paths to $Y$ except through $X$ (valid) 
+- We move the no-open-back-doors assumption to the IV rather than the treatment
+- We isolate JUST the variation that comes from `Z`. No back doors in that variation! We have a causal effect
+- Can conceptually think of it as (or literally apply it to) an experiment where randomization doesn't work perfectly
+
+## Instrumental Variables
+
+```{r, dev='CairoPNG', echo=FALSE, fig.width=7, fig.height=5.5}
+dag <- dagify(X~Z+W,
+              Y~X+W,
+              coords=list(
+                x=c(Z=0,X=1,W=1.5,Y=2),
+                y=c(Z=0,X=0,W=1,Y=0)
+              )) %>% tidy_dagitty()
+ggdag_classic(dag,node_size=20) +
+  theme_dag_blank()
+```
+
+## Treatment Effects
+
+- There isn't *a* treatment effect. They vary across time, space, individual
+- Our methods give us averages - ATE (experiment), ATT (DID), LATE (IV, RDD), variance-weighted (regression w/ controls), etc.
+- We must pay close attention to what our design *and estimator* gives us
+
+## That's it!
+
+- In a very condensed way, that's the material we covered!
+- I recommend looking back over slides, notes, homeworks

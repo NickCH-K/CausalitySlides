@@ -1,0 +1,55 @@
+---
+title: "Lecture 14 Zimmerman 2014"
+author: "Nick Huntington-Klein"
+date: "`r Sys.Date()`"
+output:   
+  revealjs::revealjs_presentation:
+    theme: solarized
+    transition: slide
+    self_contained: true
+    smart: true
+    fig_caption: true
+    reveal_options:
+      slideNumber: true
+    
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning=FALSE, message=FALSE)
+theme_set(theme_gray(base_size = 15))
+```
+
+## Zimmerman 2014
+
+- Zimmerman 2014 uses a cutoff in the admissions process to estimate the returns to education for academically marginal students
+- Today we will be discussing that paper
+
+## Zimmerman 2014
+
+First off:
+
+- What does he look for and what does he find?
+- Why might we be particularly interested in the returns to education for marginal students?
+- How do we know that RDD gives us the return for *those* students?
+- What kind of RDD is this?
+- How can we characterize his results and any strengths/weaknesses?
+
+## Zimmerman 2014
+
+- Why does he check for *manipulation of the running variable* in Section V.A?
+- Why might this be important?
+- What does manipulation mean and why might it mess up an RDD result?
+- How does he do this check?
+
+## Running Variable Notes
+
+- We can do these sorts of tests ourselves for manipulation using the `rddensity()` and `rdplotdensity()` functions in the **rddensity** package 
+- Other potential issues with running variables: *granularity*
+- Why might it be difficult to do an RDD if the running variable is very *coarsely defined*?
+
+## Zimmerman 2014
+
+- What other tests does he do? 
+- What does Figure 3 show us?
+- How can we get the results from the graphs and from the regression tables?
+- Is there anything we might want to do differently in this study?

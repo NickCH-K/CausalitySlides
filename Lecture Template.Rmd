@@ -1,0 +1,208 @@
+---
+title: "Lecture 1: A World of Data"
+author: "Nick Huntington-Klein"
+date: "December 1, 2018"
+output:   
+  revealjs::revealjs_presentation:
+    theme: solarized
+    transition: slide
+    self_contained: true
+    smart: true
+    fig_caption: true
+    reveal_options:
+      slideNumber: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(tidyverse)
+theme_set(theme_gray(base_size = 15))
+```
+
+## A World of Data
+
+It's cliche to say that the world focuses more on data than ever before, but that's just because it's true
+
+Even moreso than understanding *statistics and probability*, in order to understand the world around us we need to understand *data*, *how data is used*, and *what it means*
+
+Google and Facebook, among many others, have reams and reams of data on you and everybody else. What do they do with it? Why?
+
+## Understanding the World
+
+Increasingly, understanding the world is going to require the ability to understand data
+
+And learning things about the world is going to require the ability to manipulate data 
+
+## Data Scientist Pay
+
+```{r, echo = FALSE}
+#Read in data
+salary <- read.csv(text="Experience,Salary
+0.11508951406649626, 89130.43478260869
+1.877024722932652, 92521.73913043478
+4.128303495311169, 96956.52173913045
+5.890238704177326, 100347.82608695651
+8.044117647058828, 104000
+10.051577152600172, 106869.5652173913
+12.205882352941181, 110000
+14.654731457800512, 112608.6956521739
+16.956308610400683, 115478.26086956522
+19.01300085251492, 118086.95652173912
+19.99168797953965, 120173.91304347827
+21.8994032395567, 125130.4347826087
+23.758312020460362, 129826.08695652173
+25.665387894288155, 135565.21739130435
+27.425618073316286, 141043.47826086957
+29.67455242966753, 148347.82608695654")
+#Use ggplot to plot out data 
+ggplot(salary,aes(x=Experience,y=Salary))+
+  #with a smoothed line graph
+  stat_smooth(method = lm, formula = y ~ poly(x, 10), se = FALSE)+
+  #Have y-axis start at 50k
+  expand_limits(y=50000)+
+  #Add labels
+  labs(title="Data Scientist Salary by Experience",subtitle="Data from Glassdoor; avg college grad starts $49,875")+
+  xlab("Experience (Years)")
+```
+
+## Top Jobs for Economics Majors
+
+Data from The Balance Careers
+
+```{r, echo = FALSE}
+#Read in data
+topjobs <- read.csv(text="Job,Salary,UsesData
+                    Market Research Analyst,71450,A Lot
+                    Economic Consultant,112650,A Lot
+                    Comp & Bfts Manager,130010,A Lot
+                    Actuary,114850,A Lot
+                    Credit Analyst,82900,A Little
+                    Financial Analyst,99430,A Little
+                    Policy Analyst,112030,A Lot
+                    Lawyer,141890,Not a Lot
+                    Management Consultant,93440,A Little
+                    Business Reporter,67500,Not a Lot")
+#Sort so it goes from lowest salary to highest
+topjobs$Job <- reorder(topjobs$Job, topjobs$Salary)
+#Reorder factor so it goes least to most
+topjobs$UsesData <- factor(topjobs$UsesData,levels=c("Not a Lot","A Little","A Lot"))
+#Plot out 
+ggplot(topjobs,aes(x=Job,y=Salary/1000,fill=UsesData))+
+  #With a bar graph
+  geom_col()+
+  #Label
+  ylab("Avg. Salary (Thousands)")+xlab(element_blank())+
+  labs(title="Do Top-Ten Econ Major Jobs Use Data?")+
+  #Rotate job labels so they fit
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+## We Use Data to Understand the Economy
+
+```{r, echo = FALSE}
+#Read in data
+gdp <- read.csv('GDP.csv')
+#Get GDP in the first year of data using dplyr
+gdp <- gdp %>%
+  group_by(Country) %>%
+  mutate(firstGDP=GDP[1]) %>%
+  mutate(gdprel=GDP/firstGDP)
+#Plot data
+ggplot(gdp,aes(x=Year,y=gdprel,color=Country))+
+  #Line graph
+  geom_line()+
+  #Label
+  xlab("Year")+ylab("GDP Relative to 1960")+
+  theme(legend.title=element_blank())
+                      
+```
+
+## We Use Data to Understand Business
+
+![Data from SkyHighNetworks](Lecture_01-cloud-market-revenue.PNG)
+
+## We Use Data to Understand Politics
+
+
+![Data from FiveThirtyEight](Lecture_01_Politics_Example.PNG)
+
+## We Use Data to Understand the World
+
+```{r, echo = FALSE}
+#Read in data
+data(co2)
+#Plot, cex for bigger font
+plot(co2,xlab="Year",ylab="Atmospheric CO2 Concentration",cex=1.75)
+```
+
+## This Class
+
+In this class, we'll be accomplishing a few goals.
+
+- Learning how to use the statistical programming language R
+- Learning how to understand the data we see in the world
+- Learning how to figure out *what data actually tells us*
+- Learning about *causal inference* - the economist's comparative advantage!
+
+## Why Programming?
+
+Why do we have to learn to code? Why not just use Excel?
+
+- Excel is great at being a spreadsheet. You should learn it. It's a pretty bad data analysis tool though
+- Learning a programming language is a very important skill
+- R is free, very flexible (heck, I wrote these slides in R), is growing in popularity, will be used in other econometrics courses, and easy to jump to something like Python if need be
+
+## Don't Be Scared
+
+- Programming isn't all that hard
+- You're just telling the computer what to do
+- The computer will do exactly as you say
+- Just imagine it's like your bratty little sibling who would do what you said, *literally*
+
+## Plus
+
+- As mentioned, once you know one language it's much easier to learn others
+- There will be plenty of resources and cheat sheets to help you
+- Ever get curious and have a question? Now you can just *answer it*. How cool is that?
+
+## Causal Inference?
+
+What is causal inference?
+
+- It's easy to get data to tell us what happened, but not **why**. "Correlation does not equal casuation"
+- Economists have been looking at causation for longer than most other fields. We're good at it!
+- Causal inference is often necessary to link data to *models* and actually *learn how the world works*
+- We'll be taking a special approach to causal inference, one that lets us avoid complex mathematical models
+
+## Lucky You!
+
+This is a pretty unusual course. We're lucky enough to be able to start the econometrics sequence off this way.
+
+In most places, you have to learn programming *while* learning advanced methods, and similarly for causal inference!
+
+Here we have time to build these important skills and intuitions before sending you into the more mathematical world of other econometrics courses
+
+## Structure of the Course
+
+1. Programming and working with data
+2. Causal Inference and learning from data
+3. Onto the next course!
+
+## Admin
+
+- Syllabus
+- Homework (due Sundays, including this coming Sunday)
+- Short writing projects
+- Attendance
+- Midterms
+- Final
+- Extra Credit
+
+## An Example
+
+- Let's look at a real-world application of data to an important economic problem
+- To look for: What data are they using?
+- How do they tell a story with it?
+- What can we learn from numbers alone?
+- How do they interpret the data? Can we trust it?
+- [Economic Lives of the Middle Class](https://www.nytimes.com/2018/11/03/upshot/how-the-economic-lives-of-the-middle-class-have-changed-since-2016-by-the-numbers.html)

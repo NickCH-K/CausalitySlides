@@ -1,0 +1,392 @@
+---
+title: "Lecture 7: Front Doors, and Other Details"
+author: "Nick Huntington-Klein"
+date: "`r Sys.Date()`"
+output:   
+  revealjs::revealjs_presentation:
+    theme: solarized
+    transition: slide
+    self_contained: true
+    smart: true
+    fig_caption: true
+    reveal_options:
+      slideNumber: true
+    
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning=FALSE, message=FALSE)
+library(tidyverse)
+library(dagitty)
+library(ggdag)
+library(gganimate)
+library(ggthemes)
+library(Cairo)
+theme_set(theme_gray(base_size = 15))
+```
+
+## Recap
+
+- We can represent our *causal model of the world* in a causal diagram
+- Once we've written the model, it will tell us *exactly which calculation* will identify our effect
+- We list all paths between treatment and outcome
+- Then, control for the right variables to close all back-door paths while leaving all front-door paths open
+
+## But!
+
+- There's a big problem with this!
+- Simply, it's *very common* that this approach will tell us that we need to control for something that we can't or didn't measure 
+- It's also common, since this is social science, to acknowledge that there are probably a bunch of things we didn't think of that *should* be on our diagram, and so we shouldn't be too confident in our ability to close all the back doors
+
+## So What Then?
+
+- In economics in particular, we will try to *isolate the variation in a single front-door path* instead of shutting all the back-door paths
+- This can be done in a few different ways, which we'll talk about today, and cover heavily through the rest of the course
+- Note that all of these will generally *combine* with back-door closing in order to work
+- Experiments, Natural Experiments, and (rarely) the Front-Door Method 
+
+## Experiments
+
+What is a randomized experiment?
+
+- The researcher has control over the treatment itself
+- They can choose to randomly give it to some people but not others
+- When you do this, some of the variation in treatment has *no back doors*
+- Plus, we can *find* that variation by only using the data from our experiment!
+
+## Experiments
+
+- We've been talking about identification, we can also refer to a variable that is assigned completely at random as "exogenous"
+- Something that is caused by some other variable in the diagram (has back doors) is *endogenous*
+- The random assignment is *exogenous*
+
+## Random experiments and causality
+
+- Annoyingly, most things we'd like to know the effect of have back-door paths to most of the outcomes we'd like to know the effect *on*
+
+```{r, dev = 'CairoPNG', fig.height = 5}
+dag <- dagify(Outcome ~ Treatment + AnnoyingEndogeneity,
+              Treatment ~ AnnoyingEndogeneity,
+              coords=list(
+                x=c(Treatment = 1, AnnoyingEndogeneity = 2, Outcome = 3),
+                y=c(Treatment = 1, AnnoyingEndogeneity = 2, Outcome = 1)
+              )) %>% tidy_dagitty()
+ggdag_classic(dag,node_size=10) + 
+  theme_dag_blank() +
+  expand_limits(x=c(.5,3.5))
+
+```
+
+## Random experiments and causality
+
+- The whole idea of running an experiment is to *add another source of variation in the Treatment that has no back doors*
+
+```{r, dev = 'CairoPNG', fig.height = 5}
+dag <- dagify(Outcome ~ Treatment + AnnoyingEndogeneity,
+              Treatment ~ AnnoyingEndogeneity + Randomization,
+              coords=list(
+                x=c(Randomization = 0,Treatment = 3, AnnoyingEndogeneity = 4, Outcome = 5),
+                y=c(Randomization = 1, Treatment = 1, AnnoyingEndogeneity = 2, Outcome = 1)
+              )) %>% tidy_dagitty()
+ggdag_classic(dag,node_size=10) + 
+  theme_dag_blank() + 
+  expand_limits(x=c(-.5,2.5))
+
+```
+
+## Random experiments and causality
+
+- If the randomization is truly random, it can't possibly be related to anything on the back doors. It ONLY affects Treatment - nothing else!
+- So AMONG the people who were randomized in/out of treatment, this is what the diagram looks like. Easy identification!
+
+```{r, dev = 'CairoPNG', fig.height = 2}
+dag <- dagify(Outcome ~ Treatment ,
+              Treatment ~  Randomization,
+              coords=list(
+                x=c(Randomization = 0,Treatment = 3,  Outcome = 5),
+                y=c(Randomization = 1, Treatment = 1,  Outcome = 1)
+              )) %>% tidy_dagitty()
+ggdag_classic(dag,node_size=10) + 
+  theme_dag_blank() + 
+  expand_limits(x=c(-.5,2.5))
+
+```
+
+## Experiments
+
+- So with a randomized experiment, identifying our causal arrow of interest is easy, because among the subjects in our experiment, there is no back door
+- But of course this comes with its own costs!
+
+## Problems with Experiments
+
+- Not always possible/ethical
+- Expensive when they are possible/ethical
+- The fact they're expensive can lead us to skimp on sample size
+- Or use people who are convenient to experiment on rather than representative of everyone
+- People may act differently if they know they're in an experiment
+- An artificial intervention may not be the same as the natural thing
+
+## Problems with Experiments
+
+- This is not to say that experiments are bad by any means
+- But there are reasons we can't solve every problem with experiments
+- (and trying to can lead you places like where many fields of psychology are these days-not great!)
+- So if we still want to study causal effects, we may be in a situation where an experiment is infeasible, or may be outclassed by a *natural* experiment...
+
+
+## Natural Experiments
+
+- A *natural experiment* can take many forms, but the basic idea is that something experiment-like occurs without the researcher's control
+- In other words, *there is a form of exogenous variation in the wild*
+- (or at least conditionally exogenous)
+- And we can use that exogenous variation to identify our effect of interest
+
+## Natural Experiments
+
+- Let's take a classic example of the Vietnam lottery draft (Angrist and Krueger 1992)
+- During the Vietnam war, men were drafted into the US military based on their birthdates. The birthdates of the year were put into random order, and men were drafted in that order
+- Basically, randomly assigning you to military service!
+- Being assigned to the draft early gave you extra reason to go to college so you could avoid it - they wanted to know how college affected your earnings
+
+## Natural Experiments
+
+- Even though the researcher has no control over this process (and would likely do it a little differently if they could)...
+- If we *isolate just the part of military service that is driven by this exogenous variation*...
+- Then *that variation in military service is, also, exogenous*
+- Just like in an experiment we only use data from people in the experiment
+
+## The Vietnam Draft
+
+```{r, dev = 'CairoPNG', fig.height = 4}
+dag <- dagify(Earnings ~ College + AnnoyingEndogeneity,
+              College ~ AnnoyingEndogeneity + Birthdate,
+              coords=list(
+                x=c(Birthdate = 0,College = 3, AnnoyingEndogeneity = 4, Earnings = 5),
+                y=c(Birthdate = 1, College = 1, AnnoyingEndogeneity = 2, Earnings = 1)
+              )) %>% tidy_dagitty()
+ggdag_classic(dag,node_size=10) + 
+  theme_dag_blank() + 
+  expand_limits(x=c(-.5,2.5))
+
+```
+
+## The Vietnam Draft
+
+- In an experiment, we'd limit the data just to people in the experiment, and then see how your assignment into treatment relates to your outcome
+- Here, everyone is "in the experiment", and also assignment isn't perfect!
+- Plenty of people will be assigned to an early draft number but *not* go to college
+
+## The Vietnam Draft
+
+- Remember, our goal is to *isolate the variation in treatment that is exogenous*
+- So, we can just... do that!
+- Predict $College$ using $Birthdate$ in a regular ol' regression (or more specifically, predict $College$ using your draft order based on birthdate)
+- And then use *only those predicted values* in predicting $Earnings$
+- *That variation we've isolated* is exogenous, no back doors - we've identified the effect!
+
+## The Vietnam Draft
+
+- This particular approach to natural experiments is called *instrumental variables* and we'll talk more about it later
+- But the principle applies generally. Find a context in which *you can pick out some exogenous variation in treatment*, and then use just that variation!
+
+## The Vietnam Draft
+
+- The variation in $Birthdate$ has no back doors, so if we isolate that...
+
+```{r, dev = 'CairoPNG', fig.height = 2}
+dag <- dagify(Earnings ~ College,
+              College ~  Birthdate,
+              coords=list(
+                x=c(Birthdate = 0,College = 3,  Earnings = 5),
+                y=c(Birthdate = 1, College = 1, Earnings = 1)
+              )) %>% tidy_dagitty()
+ggdag_classic(dag,node_size=10) + 
+  theme_dag_blank() + 
+  expand_limits(x=c(-.5,2.5))
+
+```
+
+## Isolating Variation
+
+- It's sort of like the opposite of controlling: Instead of removing the variation associated with a variable, we remove all variation *not* associated with it
+- This is a way that we can mimic an actual controlled experiment using only observational data
+- In many cases this is more plausible than controlling for enough stuff because we have ideally *moved the assumptions we need to make to an easier variable*
+
+## Moving the Assumptions
+
+- In effect, this *moves our assumptions* from one variable to another
+- To identify the effect of treatment by controlling for stuff, we must identify all back doors between $Treatment$ and $Outcome$ and close them
+- Now, instead, we must identify all back doors between $ExogenousVariation$ and $Outcome$ (or front doors that don't pass through $Treatment$) and close all of *them*
+
+## Moving the Assumptions
+
+- The same assumptions need to apply! But hopefully those assumptions are *more plausible* for our source of exogenous variation than our treatment
+- There are a BUNCH of back doors having to do with college attendance. It would be really hard to close them all
+- But, while we can imagine some stories as to how birthdate might have back doors, they're likely more limited, and maybe we can believe we can actually control for all of them
+- (like I said, sometimes exogeneity only holds conditionally - we may need to control for something! Perhaps richer people are more likely to have kids on certain days, so we'd want to control for parental income)
+
+## The Front Door Method
+
+- There's another way we can isolate front-door paths besides finding a source of exogenous variation
+- This is called the "front door method" and it's rarely used so we'll cover it only briefly
+- (why rare? Because the precise kind of DAG you need for this to work doesn't seem to pop up much)
+
+
+## The Front Door
+
+- Imagine this version of our wine and lifespan graph from last time
+
+```{r, dev='CairoPNG', echo=FALSE, fig.width=7, fig.height=5}
+dag <- dagify(life~drugs+health+income,
+              drugs~wine,
+              wine~health+income,
+              health~U1,
+              income~U1,
+              coords=list(
+                x=c(life=5,wine=2,drugs=3.5,health=3,income=4,U1=3.5),
+                y=c(life=3,wine=3,drugs=2,health=4,income=4,U1=4.5)
+              )) %>% tidy_dagitty()
+ggdag_classic(dag,node_size=20) + 
+  theme_dag_blank()
+```
+
+## The Front Door
+
+- This makes it real clear that you shouldn't control for drugs - that shuts the FRONT door! There's no way to get out of your house EXCEPT through the back door!
+- Note in this case that there's no back door from `wine` to `drugs`
+- And if we control for `wine`, no back door from `drugs` to `life` (let's check this by hand)
+- So we can identify `wine -> drugs` and we can identify `drugs -> life`, and combine them to get `wine -> life`!
+
+## Cigarettes and Cancer
+
+- Consider this original application of the front-door method
+
+```{r, dev='CairoPNG', echo=FALSE, fig.width=7, fig.height=5}
+dag <- dagify(tar~cigs,
+              cigs~health+income,
+              life~tar+health+income,
+              coords=list(
+                x=c(cigs=1,tar=2,health=2,income=2,life=3),
+                y=c(cigs=2,tar=2,health=1,income=3,life=2)
+              )) %>% tidy_dagitty()
+ggdag_classic(dag,node_size=20) + 
+  theme_dag_blank()
+```
+
+## Paths
+
+- <span style = "color:red">Front doors</span>/<span style = "color:blue">Back doors</span>
+- <span style = "color:red">`cigs -> tar -> cancer`</span>
+- <span style = "color:blue">`cigs <- income -> cancer`</span>
+- <span style = "color:blue">`cigs <- health -> cancer`</span>
+
+## Paths
+
+- Closing these back doors is the problem that epidemiologists faced
+- They can't just run an experiment!
+- Problem: there are actually MANY back doors we're not listing
+- And sometimes we can't observe/control for these things
+- How can you possibly measure "health" well enough to actually control for it?
+
+## The Front Door Method
+
+- So, noting that there's no back door from `cigs` to `tar`, and then controlling for `cigs` no back door from `tar` to `cancer`, they combined these two effects to get the causal effect of `cigs` on `life`
+- This is how we established this causal effect!
+- Doctors had a decent idea that cigs caused cancer before, but some doctors disagreed
+- And they had good reason to disagree! The back doors were VERY plausible reasons to see a `cigs`/`cancer` correlation other than the front door
+
+
+## Methods for Front Doors
+
+- We will be focusing quite a lot on these methods for isolating front door variation
+- This is because they can help us get away with knowing a little bit less about the underlying true model
+- Although we still have to have a strong idea of it - all of these methods rely on assumptions about it! Just maybe easier assumptions than "knowing and closing all back doors"
+
+
+## Concept Checks
+
+- If $Z$ is exogenous, why does that let us say that the part of $X$ predicted by $Z$ is exogenous too?
+- Because there are so many complex social processes that go into choosing to get more education, the effect of education on earnings is not identified. What's something that's related to education but might be easier to make exogenous than education?
+
+## Other Tidbits
+
+- As we close out our conceptual discussion of causality and move into the more methods-focused portion of the course...
+- Some additional details of things we can do with causal diagrams!
+
+
+## Placebo Tests
+
+- A *placebo test* is a way of testing the validity of a causal diagram
+- Simply put, for a given diagram, there's no reason why that diagram only applies to a certain treatment and a certain outcome
+- You could treat *any* two variables on the diagram as treatment and outcome
+
+## Placebo Tests
+
+- So what?
+- Well, if we pick a causal effect (or conditional causal effect) that *shouldn't be there*, but it is, that tells us the diagram is wrong!
+- For example, let's go back to birthdates and Vietnam, picking out a particular source of endogeneity:
+
+## Placebo Tests
+
+```{r, dev = 'CairoPNG'}
+dag <- dagify(Earnings ~ College + ParentalIncome,
+              College ~ ParentalIncome + Birthdate,
+              coords=list(
+                x=c(Birthdate = 0,College = 3, ParentalIncome = 4, Earnings = 5),
+                y=c(Birthdate = 1, College = 1, ParentalIncome = 2, Earnings = 1)
+              )) %>% tidy_dagitty()
+ggdag_classic(dag,node_size=10) + 
+  theme_dag_blank() + 
+  expand_limits(x=c(-.5,2.5))
+
+```
+
+## Placebo Tests
+
+- our use of IV here *relies on this diagram being accurate*
+- Can we check that?
+- Well, according to this diagram, what should the relationship between $Birthdate$ and $ParentalIncome$ be?
+- The only path is $Birthdate \rightarrow College \leftarrow ParentalIncome$, and that has a collider!
+- So the relationship *SHOULD* be 0.
+- If we check `cor(ParentalIncome,Birthdate)` and it's not 0, that tells us our diagram is wrong
+
+
+## Placebo Tests
+
+- We can also do this with controls. That diagram also suggests that, controlling for $College$ and $ParentalIncome$, the relationship between $Birthdate$ and $Earnings$ should be 0
+- (Quiz: why do we need to control for $ParentalIncome$ too?)
+- If we regress earnings on all three of those and get a meaningful effect on $Birthdate$, then the diagram is wrong!
+- Granted, the diagram is always wrong a little bit, but this can still point us to real problems
+
+## Practice
+
+In the diagram on the next page...
+
+- What can we do to identify the effect of $D$ on $Y$, if $U1$ is unobserved? There's more than one way!
+- What are some tests we could do to check the validity of the model?
+
+## Practice
+
+```{r, dev = 'CairoPNG'}
+set.seed(1000)
+dag <- dagify(Y~C+A+U1,
+              A~D,
+              C~F,
+              U1~E,
+              F~B,
+              D~C+B+U1,
+              B~E,
+              coords = list(
+                x = c(B = 1, D = 2, A = 3, Y = 4, F = 2, E = 2, C = 3, U1 = 3),
+                y = c(B = 2, D = 2, A = 2, Y = 2, C = 3, F = 3, E = 1, U1 = 1)
+              )) %>% tidy_dagitty()
+ggdag_classic(dag,node_size=10) + 
+  theme_dag_blank()
+
+```
+
+## Answers
+
+- Can't do it by controlling since $U1$ is unobserved
+- Could use front-door method. $D \rightarrow A$ is identified, as is $A \rightarrow Y$. Just combine 'em!
+- Could isolate the part of $D$ predicted by $B$ and use that to predict $Y$. This requires us to control for $E$ and either $F$ or $C$.

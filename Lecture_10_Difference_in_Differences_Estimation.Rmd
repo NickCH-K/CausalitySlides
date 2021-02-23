@@ -1,0 +1,264 @@
+---
+title: "Lecture 10 Estimation of Difference in Differences"
+author: "Nick Huntington-Klein"
+date: "`r Sys.Date()`"
+output:   
+  revealjs::revealjs_presentation:
+    theme: solarized
+    transition: slide
+    self_contained: true
+    smart: true
+    fig_caption: true
+    reveal_options:
+      slideNumber: true
+    
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning=FALSE, message=FALSE)
+library(tidyverse)
+library(dagitty)
+library(ggdag)
+library(gganimate)
+library(ggthemes)
+library(Cairo)
+library(fixest)
+library(modelsummary)
+theme_set(theme_gray(base_size = 15))
+```
+
+## Difference-in-Differences
+
+- The basic idea is to take fixed effects *and then compare the within variation across groups*
+- We have a treated group that we observe *both before and after they're treated*
+- And we have an untreated group
+- The treated and control groups probably aren't identical - there are back doors! So... we *control for group* like with fixed effects
+
+## Today
+
+- Last time we compared means by hand
+- How can we get standard errors? How can we add controls? What if there are more than two groups?
+- We'll be going over how to implement DID in regression *and other methods*
+- Remember, regression is just a tool
+
+## Two-Way Fixed Effects
+
+- We want an estimate that can take *within variation* for groups
+- also adjusting for time effects
+- and then compare that within variation across treated vs. control groups
+- Sounds like a job for fixed effects!
+
+## Two-way Fixed Effects
+
+- For standard DID where treatment goes into effect at a particular time, we can estimate DID with
+
+$$ Y = \beta_i + \beta_t + \beta_1Treated + \varepsilon $$
+
+- Where $\beta_i$ is group fixed effects, $\beta_t$ is time-period fixed effects, and $Treated$ is a binary indicator equal to 1 if you are currently being treated (in the treated group and after treatment)
+- $Treated = TreatedGroup\times After$
+- Typically run with standard errors clusteed at the group level (why?)
+
+## Two-way Fixed Effects
+
+- Why this works is a bit easier to see if we limit it to a "2x2" DID (two groups, two time periods)
+
+$$ Y = \beta_0 + \beta_1TreatedGroup + \beta_2After + \beta_3TreatedGroup\times After + \varepsilon $$
+
+- $\beta_1$ is prior-period group diff, $\beta_2$ is shared time effect
+- $\beta_3$ is *how much bigger the $TreatedGroup$ effect gets after treatment vs. before, i.e. how much the gap grows
+- Difference-in-differences!
+
+## Two-way Fixed Effects
+
+```{r, echo = TRUE}
+tb <- tibble(groups = sort(rep(1:10,600)), time = rep(sort(rep(1:6,100)),10)) %>%
+  # Groups 6-10 are treated, time periods 4-6 are treated
+  mutate(Treated = I(groups>5)*I(time>3)) %>%
+  # True effect 5
+  mutate(Y = groups + time + Treated*5 + rnorm(6000))
+
+m <- feols(Y ~ Treated | groups + time, data = tb)
+
+msummary(m, stars = TRUE, gof_omit = 'AIC|BIC|Lik|F|Pseudo|Adj')
+```
+
+## Example
+
+- As a quick example We'll use `data(injury)` from `library(wooldridge)`
+- This is from Meyer, Viscusi, and Durbin (1995) - In Kentucky in 1980, worker's compensation law changed to increase benefits, but only for high-earning individuals
+- What effect did this have on how long you stay out of work?
+- The treated group is individuals who were already high-earning, and the control group is those who weren't
+
+## Example
+
+```{r, echo = TRUE}
+data(injury, package = 'wooldridge')
+injury <- injury %>%
+  filter(ky == 1)  %>% # Kentucky only
+  mutate(Treated = afchnge*highearn)
+m <- feols(ldurat ~ Treated | highearn + afchnge, data = injury)
+msummary(m, stars = TRUE, gof_omit = 'AIC|BIC|Lik|Adj|Pseudo')
+```
+
+## Interpretation
+
+- The coefficient on $Treated$ is how much more the treated group(s) changed than the untreated group(s) (DID)
+- Not shown in the table, but the coefficient on the group FEs is how different the groups are before treatment
+- And the coefficient on the time FEs is the shared time change
+
+## Picking Controls
+
+- For this to work we have to *pick the control group* to compare to
+- How can we do this?
+- We just need a control group for which parallel trends holds - if there had been no treatment, both treated and untreated would have had the same time effect
+- We can't check this directly (since it's counterfactual), only make it plausible
+- More-similar groups are likely more plausible, and nothing should be changing for the control group at the same time as treatment
+
+## Checking Parallel Trends
+
+- There are two main ways we can use *prior* trends to at least test the plausibility of parallel trends, if not test parallel trends directly itself
+- First, we can check for differences in *prior trends*
+- Second, we can do a *placebo test*
+
+## Prior Trends
+
+- If the two groups were already trending towards each other, or away from each other, before treatment, it's kind of hard to believe that parallel trends holds
+- They *probably* would have continued trending together/apart, breaking parallel trends. We'd mix up the continuation of the trend with the effect of treatment
+- We can test this by looking for differences in trends with an interaction term. 
+- Also, *look at the data*! We did that last time.
+- Sometimes people "fix" a difference in prior trends by controlling for prior trends by group, but tread lightly as this can introduce its own biases!
+
+## Prior Trends
+
+- This is done with a polynomial trend here (since it's trickier) but could easily be linear
+- Using EITC again but with a regression rather than visual inspection
+- There are only three pre-treatment periods so linear would probably be better but this is an example
+
+```{r, echo = TRUE}
+df <- read_csv('http://nickchk.com/eitc.csv') %>%
+  mutate(treated = children > 0) %>%
+  filter(year <= 1994) # use only pre-treatment data (fudging a year here so I can do polynomial)
+m <- lm(work ~ year*treated + I(year^2)*treated, data = df)
+```
+
+## Prior Trends
+
+```{r, echo = FALSE}
+msummary(m, stars = TRUE, gof_omit = 'Lik|AIC|BIC|F|Pseudo|R2')
+```
+
+## Prior Trends
+
+- Test if the interaction terms are jointly significant
+
+```{r, echo = TRUE}
+library(car)
+linearHypothesis(m, c('year:treatedTRUE','treatedTRUE:I(year^2)'))
+```
+
+- Fail to reject - no evidence of differences in prior trends. That doesn't *prove* parallel trends but failing this test would make prior trends less *plausible*
+
+## Placebo Tests
+
+- Many causal inference designs can be tested using *placebo tests*
+- Placebo tests pretend there's a treatment where there isn't one, and looks for an effect
+- If it finds one, that indicates there's something wrong with the design, finding an effect when we know for a fact there isn't one
+- In the case of DID, we could (rare) drop the treated groups and pretend some untreated groups are treated, look for effects, or (common) drop the post-treatment data, pretend treatment happens at a different time, and check for an effect
+
+## Placebo Tests
+
+```{r, echo = TRUE}
+# Remember we already dropped post-treatment. Years left: 1991, 1992, 1993, 1994. We need both pre- and post- data, 
+# So we can pretend treatment happened in 1992 or 1993
+
+m1 <- feols(work ~ Treatment | treated + year, data = df %>%
+              mutate(Treatment = treated & year >= 1992))
+m2 <- feols(work ~ Treatment | treated + year, data = df %>%
+              mutate(Treatment = treated & year >= 1993))
+
+msummary(list(m1,m2), stars = TRUE, gof_omit = 'Lik|AIC|BIC|F|Pseudo|Adj')
+```
+## Prior Trends and Placebo
+
+- Uh oh! Those are significant effects! (keeping in mind I snuck 1994 in to make the code work better which is actually post-treatment)
+- For both placebo tests and, especially, prior trends, we're a little less concerned with significance than *meaningful size* of the violations
+- After all, with enough sample size *anything* is significant
+- And those treatment effects are fairly tiny
+
+## Dynamic DID
+
+- We've limited ourselves to "before" and "after" but this isn't all we have!
+- But that averages out the treatment across the entire "after" period. What if an effect takes time to get going? Or fades out?
+- We can also estimate a *dynamic effect* where we allow the effect to be different at different lengths since the treatment
+- This also lets us do a sort of placebo test, since we can also get effects *before* treatment, which should be zero
+
+## Dynamic DID
+
+- Simply interact $TreatedGroup$ with binary indicators for time period, making sure that the last period before treatment is expected to show up is the reference
+
+$$ Y = \beta_0 + \beta_tTreatedGroup + \varepsilon $$
+
+- Then, usually, plot it. **fixest** makes this easy with its `i()` interaction function
+
+## Dynamic DID
+
+```{r, echo = TRUE}
+df <- read_csv('eitc.csv') %>%
+  mutate(treated = 1*(children > 0)) %>%
+  mutate(year = factor(year))
+m <- feols(work ~ i(treated, year, drop = '1993') | treated + year, data = df)
+```
+
+
+## Dynamic DID
+
+```{r, echo = FALSE}
+msummary(m, stars = TRUE, gof_omit='AIC|BIC|Lik|F|Adj|Pseudo')
+```
+
+## Dynamic DID
+
+```{r, echo = TRUE}
+coefplot(m, ref = c('1993' = 3), pt.join = TRUE)
+```
+
+## Dynamic DID
+
+- We see no effect before treatment, which is good
+- No *immediate* effect in 1994, but then a consistent effect afterwards
+
+
+## Problems with Two-Way Fixed Effects
+
+- One common variant of difference-in-difference is the *rollout design*, in which there are multiple treated groups, each being treated at a different time
+- For example, wanting to know the effect of gay marriage on $Y$, and noting that it became legal in different states at different times before becoming legal across the country
+- Rollout designs are possibly the most common form of DID you see
+
+## Problems with Two-Way Fixed Effects
+
+- And yet!
+- As discovered *recently* (and popularized by Goodman-Bacon 2018), two-way fixed effects does *not* work to estimate DID when you have a rollout design
+- (uh-oh... we've been doing this for decades!)
+- Why not?
+
+## Problems with Two-Way Fixed Effects
+
+- Think about what fixed effects does - it leaves you only with within variation
+- Two types of individuals without *any* within variation between periods A and B: the never-treated and the already-treated
+- So the already-treated can end up getting used as controls in a rollout
+- This becomes a big problem especially if the effect grows/shrinks over time. We'll mistake changes in treatment effect for effects of treatment, and in the wrong direction!
+
+
+## Callaway and Sant'Anna
+
+- There are a few new estimators that deal with rollout designs properly. One is Callaway and Sant'Anna (see the **did** package)
+- They take each period of treatment and consider the group treated *on that particular period*
+- They explicitly only use untreated groups as controls
+- And they also use *matching* to improve the selection of control groups for each period's treated group
+- We won't go super deep into this method, but it is one way to approach the problem
+
+## Concept Checks / Practice
+
+- Why does two-way fixed effects give the DID estimate (when treatment only occurs at one time period)?
+- Why might we be particularly interested in seeing how the DID estimate changes relative to the treatment period?
+- Why might we want to cluster our standard errors at the group level in DID?

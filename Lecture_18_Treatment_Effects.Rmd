@@ -1,0 +1,331 @@
+---
+title: "Lecture 18 Treatment Effects"
+author: "Nick Huntington-Klein"
+date: "`r Sys.Date()`"
+output:   
+  revealjs::revealjs_presentation:
+    theme: solarized
+    transition: slide
+    self_contained: true
+    smart: true
+    fig_caption: true
+    reveal_options:
+      slideNumber: true
+    
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning=FALSE, message=FALSE)
+library(tidyverse)
+library(dagitty)
+library(ggdag)
+library(gganimate)
+library(ggthemes)
+library(Cairo)
+library(ggpubr)
+library(modelsummary)
+library(rdrobust)
+theme_set(theme_gray(base_size = 15))
+```
+
+## Recap
+
+- We've gone over all sorts of ways to estimate a causal effect
+- And how to tell when one is identified
+- But... uh... what did we just estimate exactly?
+- What even is *the* causal effect?
+
+## Treatment Effects
+
+- For any given treatment, there are likely to be *many* treatment effects
+- Different individuals will respond to different degrees (or even directions!)
+- This is called *heterogeneous treatment effects*
+
+## Treatment Effects
+
+- When we identify a treatment effect, what we're *estimating* is some mixture of all those individual treatment effects
+- But what kind of mixture? Is it an average of all of them? An average of some of them? A weighted average? Not an average at all?
+- What we get depends on *the research design itself* as well as *the estimator we use to perform that design*
+
+## Individual Treatment Effects
+
+- While we can't always estimate it directly, the true regression model becomes something like
+
+$$ Y = \beta_0 + \beta_iX + \varepsilon $$
+
+- $\beta_i$ follows its own distribution across individuals
+- (and remember, this is theoretical - we'd still have those individual $\beta_i$s even with one observation per individual and no way to estimate them separately)
+
+## Summarizing Effects
+
+- There are methods that try to give us the whole distribution of effects (and we'll talk about some of them next time)
+- But often we only get a single effect, $\hat{\beta}_1$.
+- This $\hat{\beta}_1$ is some summary statistic of the $\beta_i$ distribution. But *what* summary statistic?
+
+## Summarizing Effects
+
+- Average treatment effect: the mean of $\beta_i$
+- Conditional average treatment effect (CATE): the mean of $\beta_i$ *conditional on some value* (say, "just for men", i.e. conditional on being a man)
+- Weighted average treatment effect (WTE): the weighted mean of $\beta_i$, with weights $w_i$
+
+The latter two come in *many* flavors
+
+## Common Conditional Average Treatment Effects
+
+- The ATE among some demographic group
+- The ATE among some specific group (conditional average treatment effect)
+- The ATE just among people who were actually treated (ATT)
+- The ATE just among people who were NOT actually treated (ATUT)
+
+## Comon Weighted Average Treatment Effects
+
+- The ATE weighted by how responsive you are to an instrument/treatment assignment (local average treatment effect)
+- The ATE weighted by how much variation in treatment you have after all back doors are closed (variance-weighted)
+- The ATE weighted by how commonly-represented your mix of control variables is (distribution-weighted)
+
+## Are They Good?
+
+- Which average you'd *want* depends on what you'd want to do with it
+- Want to know how effective a treatment *was* when it was applied? Average Treatment on Treated
+- Want to know how effective a treatment would be if applied to everyone/at random? Average Treatment Effect
+- Want to know how effective a treatment would be if applied *just a little more broadly?* **Marginal Treatment  Effect** (literally, the effect for the next person who would be treated), or, sometimes, Local Average Treatment Effect
+
+## Are They Good?
+
+- Different treatment effect averages aren't *wrong* but we need to pay attention to which one we're getting, or else we may apply the result incorrectly
+- We don't want that!
+- A result could end up representing a different group than you're really interested in
+- There are technical ways of figuring out what average you get, and also intuitive ways
+
+## Heterogeneous Effects in Action
+
+- Let's simulate some data and see what different methods give us.
+- We'll start with some basic data where the effect is already identified
+- And see what we get!
+
+## Heterogeneous Effects in Action
+
+- The effect varies according to a normal distribution, which has mean 5 for group A and mean 7 for group B (mean = 6 overall)
+- No back doors, this is basically random assignment / an experimental setting
+
+```{r, echo = FALSE}
+set.seed(1000)
+```
+
+```{r, echo = TRUE}
+tb <- tibble(group = sample(c('A','B'), 5000, replace = TRUE),
+             W = rnorm(5000, mean = 0, sd = sqrt(8))) %>%
+  mutate(beta1 = case_when(
+    group == 'A' ~ rnorm(5000, mean = 5, sd = 2),
+    group == 'B' ~ rnorm(5000, mean = 7, sd = 2))) %>%
+  mutate(X = rnorm(5000)) %>%
+  mutate(Y = beta1*X + rnorm(5000))
+```
+
+## Heterogeneous Effects in Action
+
+- We're already identified, no adjustment necessary, so let's just regress $Y$ on $X$
+
+```{r, echo = FALSE}
+m <- lm(Y~X, data = tb)
+msummary(m, stars = TRUE, , gof_omit = 'AIC|BIC|F|Lik|Adj|R2|Num')
+```
+
+- We get `r scales::number(coef(m)[2], accuracy = .001)`, pretty close to the true average treatment effect of 6!
+- (note the standard error is nothing like the standard deviation of the treatment effect - those are measuring two very different things)
+
+## Variance Weighting
+
+- The more the treatment moves around, the easier it is to see whether it's doing anything
+- So treatment effects from individuals/groups with more variance in treatment get weighted more heavily
+- Importantly, this is variance in treatment *after controls are applied*
+- Variance weighting pops up with most research designs that rely on controlling for stuff via regression
+
+## Variance Weighting
+
+- The effect varies according to a normal distribution, with mean 5 for group A and mean 7 for group B (mean 6 overall)
+- Treatment $X$ has standard deviation $3$ in group A and $5$ in group B. But if not for $W$, then the sd in group A would only be $1$.
+
+```{r, echo = FALSE}
+set.seed(1000)
+```
+
+```{r, echo = TRUE}
+tb <- tibble(group = sample(c('A','B'), 5000, replace = TRUE),
+             W = rnorm(5000, mean = 0, sd = sqrt(8))) %>%
+  mutate(beta1 = case_when(
+    group == 'A' ~ rnorm(5000, mean = 5, sd = 2),
+    group == 'B' ~ rnorm(5000, mean = 7, sd = 2))) %>%
+  mutate(X = case_when(
+    group == 'A' ~ W + rnorm(5000, mean = 0, sd = 1), # SD = sqrt(sqrt(8)^2 + 1^2) = 3
+    group == 'B' ~ rnorm(5000, mean = 0, sd = 5))) %>%
+  mutate(Y = beta1*X + rnorm(5000))
+```
+
+## Heterogeneous Effects in Action
+
+- We are already identified, so let's see what we get from a basic linear regression
+
+```{r, echo = FALSE}
+m <- lm(Y~X, data = tb)
+m2 <- lm(Y~X*W, data = tb)
+
+modelsummary(list(m, m2), stars = TRUE, gof_omit = 'AIC|BIC|F|Lik|Adj|R2|Num')
+```
+## So What is That?
+
+- Where's `r scales::number(coef(m)[2], accuracy = .001)` come from? Hmm... $(3^2\times5 + 5^2\times7)/(3^2+5^2) = 6.471$...
+- And `r scales::number(coef(m2)[2], accuracy = .001)`? $(1\times5 + 5^2\times7)(1+5^2) = 6.66$...
+- (also, why do I need an interaction between $X$ and $W$ to get these exact numbers?)
+
+## Design Isn't Destiny
+
+- The specific average treatment effect you get depends on the estimator, it's *suggested* by the design but it's not *inherent*
+- For example, what if we just do weighted least squares, weighting by inverse treatment variance?
+
+```{r, echo = TRUE}
+tb <- tb %>%
+  group_by(group) %>%
+  mutate(Xvar = var(X),
+         Xcontrolvar = var(resid(lm(X~W))))
+m3 <- lm(Y~X, data = tb, weights = 1/Xvar)
+m4 <- lm(Y~X*W, data = tb, weights = 1/Xcontrolvar)
+```
+
+## Design Isn't Destiny
+
+- The 6 returns!
+
+```{r, echo = FALSE}
+msummary(list(m3,m4), stars = TRUE)
+```
+
+## What We Get
+
+- Let's go through our standard methods and think about the treatment effects they give us
+- First one's easy: fixed effects gives us an effect weighted by treatment variance *within-individual*
+- We can get back to an ATE by weighting by inverse treatment variance
+- NEXT
+
+## Difference-in-Differences
+
+- Difference-in-differences separates treated and untreated groups, and basically ensures that no treatments occur in the untreated group ever
+- The only treatment effects we can possibly see in the estimate come from the treated groups
+- We have Average Treatment on the Treated
+
+## Difference-in-Differences
+
+```{r, echo = FALSE}
+set.seed(1000)
+```
+
+```{r, echo = TRUE}
+library(fixest)
+tb <- tibble(group = sample(c('Treated','Untreated'),1000, replace = TRUE),
+             time = sample(1:20, 1000, replace = TRUE)) %>%
+  mutate(beta1 = case_when(
+    group == 'Treated' ~ 5,
+    group == 'Untreated' ~ 7
+  )) %>%
+  mutate(Treatment = (group=='Treated')*(time>10)) %>%
+  mutate(Y = 3 + time + 3*(group == 'Treated') + beta1*Treatment + rnorm(1000))
+m <- feols(Y ~ Treatment | group + time, data = tb)
+```
+
+## Difference-in-Differences
+
+```{r, echo = FALSE}
+msummary(m, stars = TRUE, gof_omit = 'AIC|BIC|Lik|F|Adj|Within|Pseudo')
+```
+
+## Difference-in-Differences
+
+- Don't forget the importance of the estimator!
+- The whole reason that two-way fixed effects for varying treatment timing doesn't work is that it gives a weird average
+- Where some of the effects get *negative* weights!
+
+## Case Methods
+
+- Skipping ahead, synthetic control and event studies also give ATT for basically the same reason
+- If there's no treatment at all among a group, it's pretty hard to include their effect at all!
+- Although we might more accurately say that these methods just give us the treatment effect for the single treated group, rather than any kind of "average"
+- Although they do (often) average over what the effect is in the post-treatment periods
+
+## Regression Discontinuity
+
+- Regression discontinuity is a design where we *isolate variation* driven by the jump over a cutoff
+- So the variation in treatment we're allowing is *only* about that jump
+- We get the *local average treatment effect* - our effect is only representative of people *near* the cutoff who are pushed to get treatment by the cutoff
+- This is true for both sharp and fuzzy designs, in the case of fuzzy it depends *how much the cutoff* increased your chances of treatment
+
+## Regression Discontinuity
+
+```{r, echo = FALSE}
+set.seed(1000)
+```
+
+
+```{r, echo = TRUE}
+tb <- tibble(Run = runif(1000)) %>%
+  mutate(beta1 = case_when(
+    abs(Run-.5) < .2 ~ 1,
+    abs(Run-.5) >= .2 ~ 5
+  )) %>%
+  mutate(Y = Run + beta1*(Run>.5) + rnorm(1000)) 
+
+m <- rdrobust(tb$Y, tb$Run, c = .5)
+```
+## Regression Discontinuity
+
+```{r, echo = TRUE}
+summary(m)
+```
+
+## Instrumental Variables
+
+- Instrumental variables is all about isolating the variation in treatment that is driven by an exogenous source
+- So... by the same logic as RDD we also get a local average treatment effect!
+
+## Instrumental Variables
+
+```{r, echo = FALSE}
+set.seed(1000)
+```
+
+```{r, echo = TRUE}
+tb <- tibble(Z = rnorm(1000), W = rnorm(1000),
+             group = sample(c('A','B','C'), 1000, replace = TRUE)) %>%
+  mutate(gamma1 = case_when(
+    group == 'A' ~ 0,
+    group == 'B' ~ 1,
+    group == 'C' ~ 3
+  )) %>%
+  mutate(X = gamma1*Z + W + rnorm(1000)) %>%
+  mutate(beta1 = case_when(
+    group == 'A' ~ 10,
+    group == 'B' ~ 5,
+    group == 'C' ~ 1
+  )) %>%
+  mutate(Y = beta1*X + W + rnorm(1000))
+m <- feols(Y ~ 1 | X ~ Z, data = tb)
+```
+
+## Instrumental Variables
+
+- $(0\times10 + 1\times 5 + 3\times1)/(0+1+3) = 2$
+
+```{r, echo = FALSE}
+msummary(m, stars = TRUE, gof_omit = 'AIC|BIC|F|Lik|Within|Pseudo|Adj')
+```
+
+## Instrumental Variables
+
+- People unaffected by the instrument don't have their treatment effect counted at all, even if they're treated!
+- This is why we need to assume monotonicity - if all the effects of $Z$ on $X$ are in the same direction (or are $0$) then the weights are positive (if the effects are negative, the negatives all cancel out)
+- But if some go in the other direction, we have negative weights and no longer have a meaningful average
+
+## Next Time
+
+- This is the end of material that may end up on the exam
+- Next time we'll do some review
+- And also talk about some cool stuff that we won't be testing on but you may want to explore - methods that let you estimate a whole distribution of treatment effects!

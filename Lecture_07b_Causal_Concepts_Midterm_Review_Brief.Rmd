@@ -1,0 +1,83 @@
+---
+title: "Causal Concepts Midterm Review"
+author: "Nick Huntington-Klein"
+date: "2/23/2021"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning=FALSE, message=FALSE)
+library(tidyverse)
+library(dagitty)
+library(ggdag)
+library(gganimate)
+library(ggthemes)
+library(ggpubr)
+library(modelsummary)
+library(Cairo)
+theme_set(theme_gray(base_size = 15))
+```
+
+## Exam Review
+
+- Just some reminders of stuff we have covered
+
+## Describing Variables
+
+- Continuous and Discrete Distributions
+- Summary statistics - mean, percentiles, skew
+- Theoretical distributions and our attempts to learn about them from data
+- Sampling variation messing up our ability to do so
+
+## Describing Relationships
+
+- Conditional means
+- Explaining one variable with another
+- Conditional distributions, contrasting distributions, scatterplots
+- Local means, fitting shapes with regressions, adding controls for conditional conditional means
+- Interaction terms
+
+## Identification
+
+- We are isolating the variation we are interested in
+- That's the "good variation"
+- Bad variation can get in the way
+- We need a model of how the world works to figure out what the bad variation is so we can sweep it out
+
+## Causal Diagrams
+
+1. Consider all the variables that are likely to be important in the data generating process (this includes variables you can't observe)
+2. For simplicity, combine them together or prune the ones least likely to be important
+3. Consider which variables are likely to affect which other variables and draw arrows from one to the other
+4. (Bonus: Test some implications of the model to see if you have the right one)
+
+## Causal Diagrams
+
+Identifying `X -> Y` by closing back doors:
+
+1. Find all the paths from `X` to `Y` on the diagram
+2. Determine which are "front doors" (start with `X ->`) and which are "back doors" (start with `X <-`)
+3. Determine which are already closed by colliders (`X -> C <- Y`)
+4. Then, identify the effect by finding which variables you need to control for to close all back doors (careful - don't close the front doors, or open back up paths with colliders!)
+
+## Controlling
+
+- One way to close back doors is by controlling
+- Control for `W` by seeing what `W` explains (perhaps with a regression) and taking it out
+
+```{r, echo=TRUE}
+library(Ecdat)
+data(BudgetFood)
+BudgetFood <- BudgetFood %>% mutate(totexp = totexp/1000000)
+m1 <- lm(wfood ~ totexp, data = BudgetFood)
+m2 <- lm(wfood_r ~ totexp_r, data = BudgetFood %>% mutate(wfood_r = resid(lm(wfood~age)),
+                                                          totexp_r = resid(lm(totexp~age))))
+m3 <- lm(wfood ~ totexp + age, data = BudgetFood)
+```
+
+## Controlling
+
+```{r, echo = FALSE}
+msummary(list(m1,m2,m3), stars = TRUE, gof_omit = 'AIC|BIC|Lik|Adj|F')
+```

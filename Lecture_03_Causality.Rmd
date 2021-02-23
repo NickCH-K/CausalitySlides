@@ -1,0 +1,214 @@
+---
+title: "Lecture 3: Causality"
+author: "Nick Huntington-Klein"
+date: "`r Sys.Date()`"
+output:   
+  revealjs::revealjs_presentation:
+    theme: solarized
+    transition: slide
+    self_contained: true
+    smart: true
+    fig_caption: true
+    reveal_options:
+      slideNumber: true
+    
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(tidyverse)
+theme_set(theme_gray(base_size = 15))
+```
+
+## Causality
+
+- We want to know "Does X cause Y?" and "How much does X cause Y?"
+- We often want to do this while only having access to *observational data*
+- This is what the class is about
+
+## Why Causality?
+
+- Many of the interesting questions we might want to answer with data are causal
+- Some are non-causal, too - for example, "how can we predict whether this photo is of a dog or a cat" is vital to how Google Images works, but it doesn't care what *caused* the photo to be of a dog or a cat
+- Nearly every *why* question is causal
+- And when we're talking about people, *why* is often what we want to know!
+
+## Also
+
+- This is economists' comparative advantage!
+- Plenty of fields do statistics. But very few make it standard training for their students to understand causality
+- This understanding of causality makes economists very useful! *This* is one big reason why tech companies have whole economics departments in them
+
+## Bringing us to...
+
+- Part of this half of the class will be understanding what causality *is* and how we can find it
+- Another big part will be understanding common *research designs* for uncovering causality in data when we can't do an experiment
+- These, more than supply & demand, more than ISLM, are the tools of the modern economist!
+
+## So what is causality?
+
+- We say that `X` *causes* `Y` if...
+- were we to intervene and *change* the value of `X` without changing anything else...
+- then `Y` would also change as a result
+
+## Some examples
+
+Examples of causal relationships!
+
+Some obvious:
+
+- A light switch being set to on causes the light to be on
+- Setting off fireworks raises the noise level
+
+Some less obvious:
+
+- Getting a college degree increases your earnings
+- Tariffs reduce the amount of trade
+
+## Some examples
+
+Examples of non-zero *correlations* that are not *causal* (or may be causal in the wrong direction!)
+
+Some obvious:
+
+- People tend to wear shorts on days when ice cream trucks are out
+- Rooster crowing sounds are followed closely by sunrise*
+
+Some less obvious:
+
+- Colds tend to clear up a few days after you take Emergen-C
+- The performance of the economy tends to be lower or higher depending on the president's political party
+
+<small>*This case of mistaken causality is the basis of the film Rock-a-Doodle which I remember being very entertaining when I was six.</small>
+
+## Important Note
+
+- "X causes Y" *doesn't* mean that X is necessarily the *only* thing that causes Y
+- And it *doesn't* mean that all Y must be X
+- For example, using a light switch causes the light to go on
+- But not if the bulb is burned out (no Y, despite X), or if the light was already on (Y without X), and it ALSO needs electicity (something else causes Y)
+- But still we'd say that using the switch causes the light! The important thing is that X *changes the distribution* of Y, not that it necessarily makes it happen for certain
+
+## So How Can We Tell?
+
+- As just shown, there are plenty of *correlations* that aren't *causal*
+- So if we have a correlation, how can we tell if it *is*?
+- For this we're going to have to think hard about *causal inference*. That is, inferring causality from data
+
+## The Problem of Causal Inference
+
+- Let's try to think about whether some `X` causes `Y`
+- That is, if we manipulated `X`, then `Y` would change as a result
+- For simplicity, let's assume that `X` is either 1 or 0, like "got a medical treatment" or "didn't"
+
+## The Problem of Causal Inference
+
+- Now, how can we know *what would happen* if we manipulated `X`?
+- Let's consider just one person - Angela. We could just check what Angela's `Y` is when we make `X=0`, and then check what Angela's `Y` is again when we make `X=1`. 
+- Are those two `Y`s different? If so, `X` causes `Y`!
+- Do that same process for everyone in your sample and you know in general what the effect of `X` on `Y` is
+
+## The Problem of Causal Inference
+
+- You may have spotted the problem
+- Just like you can't be in two places at once, Angela can't exist both with `X=0` and with `X=1`. She either got that medical treatment or she didn't. 
+- Let's say she did. So for Angela, `X=1` and, let's say, `Y=10`.
+- The other one, what `Y` *would have been* if we made `X=0`, is *missing*. We don't know what it is! Could also be `Y=10`. Could be `Y=9`. Could be `Y=1000`!
+
+## The Problem of Causal Inference
+
+- Well, why don't we just take someone who actually DOES have `X=0` and compare their `Y`?
+- Because there are lots of reasons their `Y` could be different BESIDES `X`. 
+- They're not Angela! A character flaw to be sure.
+- So if we find someone, Gareth, with `X=0` and they have `Y=9`, is that because `X` increases `Y`, or is that just because Angela and Gareth would have had different `Y`s anyway?
+
+## The Problem of Causal Inference
+
+- The main goal we have in doing causal inference is in making *as good a guess as possible* as to what that `Y` *would have been* if `X` had been different
+- That "would have been" is called a *counterfactual* - counter to the fact of what actually happened
+- In doing so, we want to think about two people/firms/countries that are basically *exactly the same* except that one has `X=0` and one has `X=1`
+
+## Potential Outcomes
+
+- The logic we just went through is the basis of the *potential outcomes model*, which is one way of thinking about causality
+- It's not the only one, or the one we'll be mainly using, but it helps!
+- We can't observe the counterfactual, and must make an estimate of what the *outcome* would *potentially* have been under the counterfactual
+- Figuring out that makes a good counterfactual estimate is a key part of causal inference!
+
+## Experiments
+
+- A common way to do causal inference in many fields is an *experiment*
+- If you can *randomly assign* `X`, then you know that the people with `X=0` are, on average, exactly the same as the people with `X=1`
+- So that's an easy comparison!
+
+## Experiments
+
+- When we're working with people/firms/countries, running experiments is often infeasible, impossible, or unethical
+- So we have to think hard about a *model* of what the world looks like
+- So that we can use our model to figure out what the *counterfactual* would be
+
+## Models
+
+- In causal inference, the *model* is our idea of what we think the process is that *generated the data*
+- We have to make some assumptions about what this is!
+- We put together what we know about the world with assumptions and end up with our model
+- The model can then tell us what kinds of things could give us wrong results so we can fix them and get the right counterfactual
+
+## Models
+
+- Wouldn't it be nice to not have to make assumptions?
+- Yeah, but it's impossible to skip!
+- We're trying to predict something that hasn't happened - a counterfactual
+- This is literally impossible to do if you don't have some model of how the data is generated
+- You can't even predict the sun will rise tomorrow without a model!
+- If you think you can, you're just don't realize the model you're using - that's dangerous!
+
+## An Example
+
+- Let's cheat again and know how our data is generated!
+- Let's say that getting `X` causes `Y` to increase by 1
+- And let's run a randomized experiment of who actually gets X
+
+```{r, echo=TRUE, eval=TRUE}
+df <- data.frame(Y.without.X = rnorm(1000),X=sample(c(0,1),1000,replace=T)) %>%
+  mutate(Y.with.X = Y.without.X + 1) %>%
+  #Now assign who actually gets X
+  mutate(Observed.Y = ifelse(X==1,Y.with.X,Y.without.X))
+#And see what effect our experiment suggests X has on Y
+df %>% group_by(X) %>% summarize(Y = mean(Observed.Y))
+```
+
+## An Example
+
+- Now this time we can't randomize X. 
+
+```{r, echo=TRUE, eval=TRUE}
+df <- data.frame(Z = runif(10000)) %>% mutate(Y.without.X = rnorm(10000) + Z, Y.with.X = Y.without.X + 1) %>%
+  #Now assign who actually gets X
+  mutate(X = Z > .7,Observed.Y = ifelse(X==1,Y.with.X,Y.without.X))
+df %>% group_by(X) %>% summarize(Y = mean(Observed.Y))
+#But if we properly model the process and compare apples to apples...
+df %>% filter(abs(Z-.7)<.01) %>% group_by(X) %>% summarize(Y = mean(Observed.Y))
+```
+
+## Identification
+
+- We have "identified" a causal effect if *the estimate that we generate gives us a causal effect*
+- In other words, **when we see the estimate, we can claim that it's isolating just the causal effect**
+- Simply looking at `lm(Y~X)` gives us the causal effect in the randomized-X case. `lm(Y~X)` **identifies** the effect of $X$ on $Y$
+- But `lm(Y~X)` does *not* give us the causal effect in the non-randomized case we did. In that case, `lm(Y~X)` does not **identify** the causal effect, but the apples-to-apples comparison we did *does* identify the effect
+- Causal inference is all about figuring out **what calculation we need to do to identify that effect**
+
+## Identification
+
+- Identifying effects requires us to understand the **data generating process** (DGP)
+- And once we understand that DGP, knowing what calculations we need to do to isolate our effect
+- Often these will require taking some conditional values (controls)
+- Or **isolating the variation we want** in some othe rway
+
+## So!
+
+- So, as we move forward...
+- We're going to be thinking about how to create models of the processes that generated the data
+- And, once we have those models, we'll figure out what methods we can use to generate plausible counterfactuals
+- Once we're really comparing apples to apples, we can figure out, using *only data we can actually observe*, how things would be different if we reached in and changed `X`, and how `Y` would change as a result.

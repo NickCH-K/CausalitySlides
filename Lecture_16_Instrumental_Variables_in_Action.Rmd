@@ -1,0 +1,247 @@
+---
+title: "Lecture 16 Instrumental Variables in Action"
+author: "Nick Huntington-Klein"
+date: "March 28, 2019"
+output:   
+  revealjs::revealjs_presentation:
+    theme: solarized
+    transition: slide
+    self_contained: true
+    smart: true
+    fig_caption: true
+    reveal_options:
+      slideNumber: true
+    
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning=FALSE, message=FALSE)
+library(tidyverse)
+library(dagitty)
+library(ggdag)
+library(gganimate)
+library(ggthemes)
+library(Cairo)
+library(fixest)
+library(modelsummary)
+theme_set(theme_gray(base_size = 15))
+```
+
+## Recap
+
+- Instrumental Variables is sort of like the opposite of controlling for a variable
+- You isolate *just* the parts of `X` and `Y` that you can explain with the IV `Z`
+- If `Z` is related to `X` but all effects of `Z` on `Y` go THROUGH `X`, you've isolated a causal effect of `X` on `Y` by isolating just the causal part of `X` and ignoring all the back doors!
+- If `Z` is binary, get difference in `Y` divided by difference in `X`
+- If not, get correlation between explained `Y` and explained `X`
+
+## Estimation
+
+- There are *lots* of details we could go into on how to estimate instrumental variables
+- 2SLS isn't the only game in town by far!
+- Generalized method of moments deals with heteroskedasticity better than 2SLS with robust SEs
+- Tests for weak instruments
+- Limited information maximum likelihood deals with weak instruments better
+
+## Estimation
+
+- Considerations for binary dependent or endogenous variables, panel IV, bias corrections, etc. etc. etc.
+- There's a lot!
+- You can read about a lot of this in the assigned textbook chapter, and it's important to know about before attempting to actually use IV
+- But we're not going to focus on that much in this class. Instead, let's ask the real question: do the necessary conditions for IV really work?
+
+## Today
+
+- We'll be seeing a few examples of instrumental variables in action in different studies
+- We'll ask what we think about the validity assumption, and how these studies actually work
+- Validity can be a hard sell sometimes!
+
+## Today
+
+- We're going to be looking at several implementations of IV in real studies
+- We'll be looking at what they did and also asking ourselves what their causal diagrams might be
+
+## Today
+- And whether we believe them! What would the diagram be for that expenditure/income example? Do we believe that there's really no back door from last year's investment to this year's expenditure? Really?
+- Every identification implies a diagram... and diagrams come from assumptions. We *always* want to think about whether we believe those assumptions
+- Remember, in any case, each of these is *just one study*. I could cite you equally plausible studies on these topics that found different findings in different contexts
+
+## Common Macro-Type Example
+
+- In macroeconomics, how does US income affect US expenditures ("marginal propensity to consume")? 
+- We can instrument with investment from LAST year.
+
+```{r, echo=TRUE}
+library(AER)
+#US income and consumption data 1950-1993
+data(USConsump1993)
+USC93 <- as.data.frame(USConsump1993)
+#lag() gets the observation above; here the observation above is last year
+IV <- USC93 %>% mutate(lastyr.invest = lag(income) - lag(expenditure)) 
+```
+
+## Common Macro-Type Example
+
+```{r, echo = TRUE}
+m <- feols(expenditure ~ 1 | income ~ lastyr.invest, data = IV, se = 'hetero')
+msummary(list('Income (First Stage)' = m$iv_first_stage,
+              'Expenditure' = m), 
+         coef_map = c('fit_income' = 'Expenditure',
+                      'lastyr.invest' = 'Lagged Investment'), 
+         gof_omit = 'AIC|BIC|R2|F|Lik', stars = TRUE)
+```
+
+## College Remediation
+
+- In most colleges, if you come unprepared to take first-year courses, you must first take remedial courses
+- Do these classes help you persist in college?
+- On one hand they can help ease you into the first-year courses
+- On the other hand you might get discouraged and drop out
+
+## College Remediation
+
+- What's our diagram? Include `Rem`ediation, `Pers`istence, other things.
+- Keep in mind that many of the things that would cause you to take remediation in the first place are the same things that might lead you to drop out (difficulty with material, dislike for school, etc.)
+- Sketch out a diagram
+
+## College Remediation
+
+- Bettinger & Long (2009) use data from Ohio and notice that the policy determining who goes to remediation varies from college to college
+- And also, as is generally well-known, people tend to go to the college closest to them
+- So for each student and each college, they calculate whether that student would be in remediation at that college
+- And use "Would be in remediation at your closest college" (`RemC`) as an instrument for "Actually in remediation" (`RemA`)
+
+## College Remediation
+
+```{r, dev='CairoPNG', echo=FALSE, fig.width=6,fig.height=6}
+dag <- dagify(RemA~RemC+A+B+C,
+              Pers~RemA+A+B+C,
+              coords=list(
+                x=c(RemA=1,RemC=0,A=1.5,B=2,C=2.5,Pers=3),
+                y=c(RemA=1,RemC=1,A=2,B=2,C=2,Pers=1)
+              )) %>% tidy_dagitty()
+ggdag_classic(dag,node_size=20) + 
+  theme_dag_blank()
+```
+
+## College Remediation
+
+- Bettinger & Long find positive effects of college remediation on persistence
+- But do we believe this IV?
+- Let's think - any possible other ways from `RemC` to `Pers`?
+- Keep in mind, `RemC` is based on the `loc`ation where you live, `loc -> RemC`. What else might be related to where you live?
+- How could we test the diagram?
+
+## Medical Care Expenditures
+
+- One part of the health care debate is how much health care should be pair for by the person *using it* and how much should be paid for by *society*
+- One concern of taking the burden off of the user is that people might use way more medical care than they need if they're not paying for it
+- How does *the price you pay* for health care affect *how much you use it*?
+
+## Medical Care Expenditures
+
+- So how does `price` affect `use`?
+- Something to keep in mind is that because of many varied insurance and social safety net programs, the `price` for the same procedure varies wildly between people
+- And might be affected by `inc`ome, `empl`oyment, what else?
+- Draw a diagram!
+- Before I show it, can you think of an instrument?
+
+## Medical Care Expenditures
+
+- Kowalski (2016) notices that in many family insurance plans, if your family member is injured, the cost-sharing in the plan means that if *you* then get injured, you'll pay less for your care
+- So `fam`ily injury is an instrument for price
+
+## Medical Care Expenditures
+
+```{r, dev='CairoPNG', echo=FALSE, fig.width=6,fig.height=6}
+dag <- dagify(price~fam+A+B+C,
+              use~price+A+B+C,
+              coords=list(
+                x=c(price=1,fam=0,A=1.5,B=2,C=2.5,use=3),
+                y=c(price=1,fam=1,A=2,B=2,C=2,use=1)
+              )) %>% tidy_dagitty()
+ggdag_classic(dag,node_size=20) +
+  theme_dag_blank()
+```
+
+## Medical Care Expenditures
+
+- Kowalski (2016) finds that a 10% price reduction increases use by 7-11%.
+- So do we believe this one?
+- Can you imagine any ways in which a family member's use of medical care might affect your use of medical care except through the price you face?
+- Let's consider some that we might be able to control for (and she does) and some we might not
+- Any back doors we can imagine? What could we test?
+
+## Stock Market Indexing
+
+- The Russell 1000 stock index indexes the top 1000 largest firms by market `cap`italization, and the Russell 2000 indexes the next top 2000
+- Both indices are value-weighted, so "big fish-small pond" stocks at the top of the 2000 have more money coming to them than "small fish-big pond" stock at the bottom of the 1000
+- Even though the price shouldn't be affected by something as immaterial as what stocks you're being compared to... maybe it does!
+
+## Stock Market Indexing
+
+- Does *where you're listed* affect your `price`?
+- Draw that diagram!
+- Keep in mind that your listing is based on your `cap` - just big enough for the 1000 and you're on the 1000, not quite there and you're on the `R2000`
+- All sorts of firm qualities may affect your `cap` and also your `price`
+- Any guesses as to what might be a good instrument?
+
+## Stock Market Indexing
+
+- Sounds like a regression discontinuity, not an IV! What gives?
+- It's BOTH! This is called "fuzzy RD"
+- When the regression discontinuity isn't perfect - crossing the cutoff takes you from, say, 40% treated to 60% rather than 0% to 100% - it's sort of like the experiments with imperfect assignment we covered
+- And the fix is the same - an IV! Being `above` is an IV for being listed on `R2000`
+
+## Stock Market Indexing
+
+```{r, dev='CairoPNG', echo=FALSE, fig.width=6,fig.height=6}
+dag <- dagify(R2000~above+A+B+C,
+              price~R2000+cap+A+B+C,
+              above~cap,
+              cap~A+B+C,
+              coords=list(
+                x=c(R2000=1,above=0,A=1.5,B=2,C=2.5,price=3,cap=0),
+                y=c(R2000=1,above=1,A=2,B=2,C=2,price=1,cap=1.5)
+              )) %>% tidy_dagitty()
+ggdag_classic(dag,node_size=20) + 
+  theme_dag_blank()
+```
+
+## Company Tax Incentives
+
+- It's common for localities to offer tax incentives to bring companies to town
+- Economists tend not to like this, as that company probably would have been just as productive elsewhere, so it's a giveaway to them
+- But, selfishly, it's nice if that company is producing in *your* city rather than elsewhere, right? Jobs!
+- What are the impact of "Empowerment Zone (`EZ`)" tax incentives on `emp`loyment? Draw the diagram!
+
+## Company Tax Incentives
+
+- This is looking pretty familiar by now
+
+```{r, dev='CairoPNG', echo=FALSE, fig.width=6,fig.height=5.5}
+dag <- dagify(EZ~comm+A+B+C,
+              emp~EZ+A+B+C+rep,
+              comm~rep,
+              coords=list(
+                x=c(EZ=1,comm=0,A=1.5,B=2,C=2.5,emp=3,rep=0),
+                y=c(EZ=1,comm=1,A=2,B=2,C=2,emp=1,rep=2)
+              )) %>% tidy_dagitty()
+ggdag_classic(dag,node_size=20) + 
+  theme_dag_blank()
+```
+
+## Company Tax Incentives
+
+- Hanson (2009) uses *the political power of your congressperson* as an IV for `EZ`
+- Did your representative make it onto a powerful `comm`ittee, increasing the chances of getting an EZ for their district? IV! (controlling for the `rep`, we're looking before/after here, like diff-in-diff)
+- Do we believe this? Any potential problems? What could we test?
+
+## Others
+
+- Try to think of a decent IV
+- For *any* causal question
+- Remember, you must have:
+    - `Z` is related to `X`
+    - All back doors from `Z` to `Y` must be closed
+    - All front doors from `Z` to `Y` must go through `X`

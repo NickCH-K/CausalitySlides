@@ -1,0 +1,697 @@
+---
+title: "Lecture 6: Back Doors"
+author: "Nick Huntington-Klein"
+date: "`r Sys.Date()`"
+output:   
+  revealjs::revealjs_presentation:
+    theme: solarized
+    transition: slide
+    self_contained: true
+    smart: true
+    fig_caption: true
+    reveal_options:
+      slideNumber: true
+    
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning=FALSE, message=FALSE)
+library(tidyverse)
+library(dagitty)
+library(ggdag)
+library(gganimate)
+library(ggthemes)
+library(Cairo)
+library(modelsummary)
+library(wooldridge)
+theme_set(theme_gray(base_size = 15))
+```
+
+## Recap
+
+- We've now covered how to create causal diagrams
+- (aka Directed Acyclic Graphs or DAGs)
+- We simply write out the list of the important variables, and draw causal arrows indicating what causes what
+- This allows us to figure out what we need to do to *identify* our effect of interest
+
+## Today
+
+- But HOW? How does it know?
+- Today we'll be covering the *process* that lets you figure out whether you can identify your effect of interest, and how
+- What do we need to condition the data on to limit ourselves just to the variation that identifies our effect of interest?
+- It turns out, once we have our diagram, to be pretty straightforward
+- So easy a computer can do it!
+
+## The Back Door and the Front Door
+
+- The basic way we're going to be thinking about this is with a metaphor
+- When you do data analysis, it's like observing that someone left their house for the day
+- When you do causal inference, it's like asking *how they left their house*
+- You want to *make sure* that they came out the *front door*, and not out the back door, not out the window, not out the chimney
+
+## The Back Door and the Front Door
+
+- Let's go back to this example
+
+```{r, dev='CairoPNG', echo=FALSE, fig.width=5, fig.height=4.5}
+dag <- dagify(IP.sp~tech,
+              profit~tech+IP.sp) %>% tidy_dagitty()
+ggdag_classic(dag,node_size=20) + 
+  theme_dag_blank()
+```
+
+## The Back Door and the Front Door
+
+- We're interested in the effect of IP spend on profits. That means that our *front door* is the ways in which IP spend *causally affects* profits
+- Our *back door* is any other thing that might drive a correlation between the two - the way that tech affects both
+
+## Paths
+
+- In order to formalize this a little more, we need to think about the various *paths*
+- We observe that you got out of your house, but we want to know the paths you might have walked to get there
+- So, what are the paths we can walk to get from IP.spend to profits?
+
+## Paths
+
+- We can go `Ip.spend -> profit`
+- Or `IP.spend <- tech -> profit`
+
+```{r, dev='CairoPNG', echo=FALSE, fig.width=5, fig.height=4.5}
+dag <- dagify(IP.sp~tech,
+              profit~tech+IP.sp) %>% tidy_dagitty()
+ggdag_classic(dag,node_size=20) + 
+  theme_dag_blank()
+```
+
+## The Back Door and the Front Door
+
+- One of these paths is the one we're interested in!
+- `Ip.spend -> profit` is a *front door path*
+- One of them is not!
+- `IP.spend <- tech -> profit` is a *back door path*
+
+## Now what?
+
+- Now, it's pretty simple!
+- In order to make sure you came through the front door...
+- We must *close the back door*
+- We can do this by *controlling/adjusting* for things that will block that door!
+- We can close `IP.spend <- tech -> profit` by adjusting for `tech`
+
+## So?
+
+- We already knew that we could get our desired effect in this case by controlling for `tech`.
+- But this process lets us figure out what we need to do in a *much wider range of situations*
+- All we need to do is follow the steps!
+    - List all the paths
+    - See which are back doors
+    - Adjust for a set of variables that closes all the back doors!
+- (orrrr use a method that singles out the front door - we'll get there)
+    
+## Example
+
+- How does wine affect your lifespan?
+
+```{r, dev='CairoPNG', echo=FALSE, fig.width=7, fig.height=5}
+dag <- dagify(life~wine+drugs+health+income,
+              drugs~wine,
+              wine~health+income,
+              health~U1,
+              income~U1,
+              coords=list(
+                x=c(life=5,wine=2,drugs=3.5,health=3,income=4,U1=3.5),
+                y=c(life=3,wine=3,drugs=2,health=4,income=4,U1=4.5)
+              )) %>% tidy_dagitty()
+ggdag_classic(dag,node_size=20) + 
+  theme_dag_blank()
+```
+
+## Paths
+
+- Paths from `wine` to `life`:
+- `wine -> life`
+- `wine -> drugs -> life`
+- `wine <- health -> life`
+- `wine <- income -> life`
+- `wine <- health <- U1 -> income -> life`
+- `wine <- income <- U1 -> health -> life`
+- Don't leave any out, even the ones that seem redundant!
+
+## Paths
+
+- <span style = "color:red">Front doors</span>/<span style = "color:blue">Back doors</span>
+- <span style = "color:red">`wine -> life`</span>
+- <span style = "color:red">`wine -> drugs -> life`</span>
+- <span style = "color:blue">`wine <- health -> life`</span>
+- <span style = "color:blue">`wine <- income -> life`</span>
+- <span style = "color:blue">`wine <- health <- U1 -> income -> life`</span>
+- <span style = "color:blue">`wine <- income <- U1 -> health -> life`</span>
+
+## Adjusting
+
+- By adjusting/controlling for variables we close these back doors
+- If an adjusted variable appears anywhere along the path, we can close that path off
+- Once *ALL* the back door paths are closed, we have blocked all the other ways that a correlation COULD appear except through the front door! We've identified the causal effect!
+- This is "the back door method" for identifying the effect. There are other methods; we'll get to them.
+
+## Adjusting for Health
+
+- <span style = "color:red">Front doors</span>/<span style = "color:blue">Open back doors</span>/<span style = "color:orange">Closed back doors</span>
+- <span style = "color:red">`wine -> life`</span>
+- <span style = "color:red">`wine -> drugs -> life`</span>
+- <span style = "color:orange">`wine <- health -> life`</span>
+- <span style = "color:blue">`wine <- income -> life`</span>
+- <span style = "color:orange">`wine <- health <- U1 -> income -> life`</span>
+- <span style = "color:orange">`wine <- income <- U1 -> health -> life`</span>
+
+## Adjusting for Health
+
+- Clearly, adjusting for health isn't ENOUGH to identify
+- We need to adjust for health AND income
+- We haven't covered how to actually control for multiple variables
+- We won't be focusing on it, but it's important for us to be able to know what *needs* to be controlled for
+
+## Adjusting for Health and Income
+
+- <span style = "color:red">Front doors</span>/<span style = "color:blue">Open back doors</span>/<span style = "color:orange">Closed back doors</span>
+- <span style = "color:red">`wine -> life`</span>
+- <span style = "color:red">`wine -> drugs -> life`</span>
+- <span style = "color:orange">`wine <- health -> life`</span>
+- <span style = "color:orange">`wine <- income -> life`</span>
+- <span style = "color:orange">`wine <- health <- U1 -> income -> life`</span>
+- <span style = "color:orange">`wine <- income <- U1 -> health -> life`</span>
+
+
+## How about Drugs?
+
+- Should we adjust for drugs?
+- No! This whole procedure makes that clear
+- It's on a *front door path*
+- If we adjusted for that, that's shutting out part of the way that `wine` *DOES* affect `life`
+
+
+## Practice
+
+- We want to know how `X` affects `Y`. Find all paths and make a list of what to adjust for to close all back doors
+
+```{r, dev='CairoPNG', echo=FALSE, fig.width=7, fig.height=5}
+dag <- dagify(Y~X+A+B+C+E,
+              X~A+B+D,
+              E~X,
+              A~U1+C,
+              B~U1,
+              coords=list(
+                x=c(X=1,E=2.5,A=2,B=3.5,C=1.5,D=1,Y=4,U1=2.5),
+                y=c(X=2,E=2.25,A=3,B=3,C=4,D=3,Y=2,U1=4)
+              )) %>% tidy_dagitty()
+ggdag_classic(dag,node_size=20) + 
+  theme_dag_blank()
+```
+
+## Practice Answers
+
+- Front door paths: `X -> Y`, `X -> E -> Y`
+- Back doors: `X <- A -> Y`, `X <- B -> Y`, `X <- A <- U1 -> B -> Y`, `X <- B <- U1 -> A -> Y`, `X <- A <- C -> Y`, `X <- B <- U1 -> A <- C -> Y`
+- (that last back door is actually pre-closed, we'll get to that later)
+- We can close all back doors by adjusting for `A` and `B`.
+
+## Controlling
+
+- So... what does it actually mean to control for something?
+- Often the way we *will do it* is just by adding a control variable to a regression. In $Y = \beta_0 + \beta_1X + \beta_2Z + \varepsilon$, the $\hat{\beta}_1$ estimate gives the effect of $X$ on $Y$ *while controlling for $Z$, and if adjusting for $Z$ closes all back doors, we've identified the effect of $X$ on $Y$!
+- But what does it *mean*?
+
+## Controlling
+
+- The *idea* of controlling for a variable is that we want to *remove all parts of the $X$/$Y$ relationship that is related to that variable*
+- I.e. we want to *remove all variation related to that variable*
+- A regression control will do this (although it will only do it *linearly*), but anything that achieves this goal will work!
+- For example, if you want to "control for income", we could add income as a regression control, *or* we could pick a sample only made up of people with very similar incomes
+- No variation in $Z$: $Z$ is controlled for!
+
+## The Two Main Approaches to Controlling
+
+Predicting Variation (what regression does):
+
+- Use $Z$ (and the other controls) to predict both $X$ and $Y$ as best you can
+- Remove all the predictable parts, and use only remaining variation, which is unrelated (orthogonal) to $Z$
+
+Selecting Non-Variation (what "matching" does):
+
+- Choose observations that have different values of $X$ but have values of $Z$ that are as similar as possible
+- With multiple controls, this requires some way of combining them together to get a single "similarity" value
+
+## The Two Main Approaches to Controlling
+
+- In this class we'll be focusing mostly on regression
+- Purely because that's what economists do most of the time
+- Regression and matching rely on slightly different assumptions to work, but neither is better than the other
+- Newfangled "doubly-robust" methods do both regression AND matching, so that the model only fails if the assumptions of BOTH methods fail
+- So then, focusing on the "predicting variation" approach...
+
+## Controlling
+
+- Up to now, here's how we've been getting the relationship between `X` and `Y` while controlling for `W`:
+1. See what part of `X` is explained by `W`, and subtract it out. Call the result the residual part of `X`.
+2. See what part of `Y` is explained by `W`, and subtract it out. Call the result the residual part of `Y`.
+3. Get the relationship between the residual part of `X` and the residual part of `Y`.
+- With the last step including things like getting the correlation, plotting the relationship, calculating the variance explained, or comparing mean `Y` across values of `X`
+
+## In code
+
+```{r, echo=TRUE, eval = FALSE}
+df <- tibble(w = rnorm(100)) %>%
+  mutate(x = 2*w + rnorm(100)) %>%
+  mutate(y = 1*x + 4*w + rnorm(100))
+df <- df %>%
+  mutate(x.resid = x - predict(lm(x~w)),
+         y.resid = y - predict(lm(y~w)))
+m1 <- lm(y~x, data = df)
+m2 <- lm(y.resid ~ x.resid, data = df)
+m3 <- lm(y~x+w, data = df)
+msummary(list(m1,m2,m3), stars = TRUE, gof_omit = 'Adj|AIC|BIC|F|Lik')
+```
+
+
+## In code
+
+```{r, echo=FALSE, eval = TRUE}
+set.seed(1000)
+df <- tibble(w = rnorm(100)) %>%
+  mutate(x = 2*w + rnorm(100)) %>%
+  mutate(y = 1*x + 4*w + rnorm(100))
+df <- df %>%
+  mutate(x.resid = x - predict(lm(x~w)),
+         y.resid = y - predict(lm(y~w)))
+m1 <- lm(y~x, data = df)
+m2 <- lm(y.resid ~ x.resid, data = df)
+m3 <- lm(y~x+w, data = df)
+msummary(list(m1,m2,m3), stars = TRUE, gof_omit = 'Adj|AIC|BIC|F|Lik')
+```
+
+
+## In Diagrams
+
+- The relationship between `X` and `Y` reflects both `X->Y` and `X<-W->Y`
+- We remove the part of `X` and `Y` that `W` explains to get rid of `X<-W` and `W->Y`, blocking `X<-W->Y` and leaving `X->Y`
+
+```{r, dev='CairoPNG', echo=FALSE, fig.width=5, fig.height=4}
+dag <- dagify(X~W,
+              Y~X+W) %>% tidy_dagitty()
+ggdag_classic(dag,node_size=20) + 
+  theme_dag_blank()
+```
+
+## Graphically
+
+```{r, dev='CairoPNG', echo=FALSE, fig.width=5, fig.height=4.5}
+df <- data.frame(W = as.integer((1:200>100))) %>%
+  mutate(X = .5+2*W + rnorm(200)) %>%
+  mutate(Y = -.5*X + 4*W + 1 + rnorm(200),time="1") %>%
+  group_by(W) %>%
+  mutate(mean_X=mean(X),mean_Y=mean(Y)) %>%
+  ungroup()
+
+#Calculate correlations
+before_cor <- paste("1. Start with raw data. Correlation between X and Y: ",round(cor(df$X,df$Y),3),sep='')
+after_cor <- paste("6. Correlation between X and Y controlling for W: ",round(cor(df$X-df$mean_X,df$Y-df$mean_Y),3),sep='')
+
+
+#Add step 2 in which X is demeaned, and 3 in which both X and Y are, and 4 which just changes label
+dffull <- rbind(
+  #Step 1: Raw data only
+  df %>% mutate(mean_X=NA,mean_Y=NA,time=before_cor),
+  #Step 2: Add x-lines
+  df %>% mutate(mean_Y=NA,time='2. Figure out what differences in X are explained by W'),
+  #Step 3: X de-meaned 
+  df %>% mutate(X = X - mean_X,mean_X=0,mean_Y=NA,time="3. Remove differences in X explained by W"),
+  #Step 4: Remove X lines, add Y
+  df %>% mutate(X = X - mean_X,mean_X=NA,time="4. Figure out what differences in Y are explained by W"),
+  #Step 5: Y de-meaned
+  df %>% mutate(X = X - mean_X,Y = Y - mean_Y,mean_X=NA,mean_Y=0,time="5. Remove differences in Y explained by W"),
+  #Step 6: Raw demeaned data only
+  df %>% mutate(X = X - mean_X,Y = Y - mean_Y,mean_X=NA,mean_Y=NA,time=after_cor))
+
+p <- ggplot(dffull,aes(y=Y,x=X,color=as.factor(W)))+geom_point()+
+  geom_vline(aes(xintercept=mean_X,color=as.factor(W)))+
+  geom_hline(aes(yintercept=mean_Y,color=as.factor(W)))+
+  guides(color=guide_legend(title="W"))+
+  scale_color_colorblind()+
+  labs(title = 'The Relationship between Y and X, Controlling for  W \n{next_state}')+
+  transition_states(time,transition_length=c(12,32,12,32,12,12),state_length=c(160,100,75,100,75,160),wrap=FALSE)+
+  ease_aes('sine-in-out')+
+  exit_fade()+enter_fade()
+
+animate(p,nframes=200)
+```
+
+## Intuitively
+
+- So this is all about removing variation explanined by the control variable
+- That's why you hear some people refer to controlling as "holding `W` constant" - we literally remove the variation in `W`, leaving it "constant"
+- Another way of thinking of it is that you're looking for variation of `X` and `Y` *within* values of `W` - this is made clear in the animation
+- **Comparing apples to apples**
+
+## An Example
+
+- We'll borrow an example from the Wooldridge econometrics textbook (data available in the `wooldridge` package)
+- LaLonde (1986) is a study of whether a job training program improves earnings in 1978 (`re78`)
+- Specifically, it has data on an *experiment* of *assigning* people to a job training program (data `jtrain2`)
+- And also data on people who *chose* to participate in that program, or didn't (data `jtrain3`)
+- The goal of causal inference - do something to `jtrain3` so it gives us the "correct" result from `jtrain2`
+
+## LaLonde
+
+```{r, echo=TRUE, eval=FALSE}
+library(wooldridge)
+#EXPERIMENT
+data(jtrain2)
+jtrain2 %>% group_by(train) %>% summarize(wage = mean(re78))
+```
+```{r, echo=FALSE, eval=TRUE}
+#EXPERIMENT
+data(jtrain2)
+jtrain2 %>% group_by(train) %>% summarize(wage = mean(re78))
+```
+```{r, echo=TRUE, eval=TRUE}
+#BY CHOICE
+data(jtrain3)
+jtrain3 %>% group_by(train) %>% summarize(wage = mean(re78))
+```
+
+## Hmm...
+
+- What back doors might the `jtrain3` analysis be facing?
+- People who need training want to get it but are likely to get lower wages anyway!
+
+```{r, dev='CairoPNG', echo=FALSE, fig.width=7, fig.height=4.5}
+set.seed(1000)
+dag <- dagify(train~need.tr+U,
+              wage~train+need.tr+U) %>% tidy_dagitty()
+ggdag_classic(dag,node_size=20) + 
+  theme_dag_blank()
+```
+
+## Apples to Apples
+
+- The two data sets are looking at very different groups of people!
+
+```{r, echo=TRUE}
+library(vtable)
+sumtable(select(jtrain2,re75,re78), out = 'return')
+sumtable(select(jtrain3,re75,re78), out = 'return')
+```
+
+## Controlling
+
+- We can't measure "needs training" directly, but we can sort of control for it by limiting ourselves solely to the kind of people who need it - those who had low wages in 1975!
+
+```{r, echo=FALSE, eval=TRUE}
+jtrain2 %>% group_by(train) %>% summarize(wage = mean(re78))
+jtrain3 %>% filter(re75 <= 1.2) %>% group_by(train) %>% summarize(wage = mean(re78))
+```
+
+## Controlling
+
+- Not exactly the same (not surprising - we were pretty arbitrary in how we controlled for `need.tr`, and we never closed `train <- U -> wage`, oh and we left out plenty of other back doors: race, age, etc.) but an improvement
+- This is a demonstration of controlling by choosing a sample; we could also just control for 1975 wages
+
+## Controlling
+
+```{r, echo = FALSE}
+msummary(list(lm(re78~train, data = jtrain3), lm(re78~train+re75, data = jtrain3)),
+         stars = TRUE, gof_omit = 'Adj|AIC|BIC|Lik|F')
+```
+## Bad Controls
+
+- So far so good - we have the concept of what it means to control and some ways we can do it, so we can get apples-to-apples comparisons
+- But what should we control for?
+- Everything, right? We want to make sure our comparison is as apple-y as possible!
+- Well, no, not actually
+
+## Bad Controls
+
+- Some controls can take you away from showing you the front door
+- We already discussed how it's not a good idea to block a front-door path.
+- An increase in the price of cigarettes might improve your health, but not if we control for the number of cigarettes you smoke!
+
+```{r, dev='CairoPNG', echo=FALSE, fig.width=5, fig.height=2.5}
+dag <- dagify(cigs~price,
+              health~cigs,
+              coords=list(
+                x=c(price=1,cigs=2,health=3),
+                y=c(price=1,cigs=1,health=1)
+              )) %>% tidy_dagitty()
+ggdag_classic(dag,node_size=20) + 
+  theme_dag_blank()
+```
+
+## Bad Controls
+
+- There is another kind of bad control - a *collider*
+- Basically, if you're listing out paths, and you see a path where the arrows *collide* by both pointing at the same variable, **that path is already blocked**
+- Like this: `X <- W -> C <- Z -> Y`
+- Note the `-> C <-`. Those arrow are colliding!
+- If we control for the collider `C`, *that path opens back up!*
+
+## Colliders
+
+- One kind of diagram (of many) where this might pop up:
+
+```{r, dev='CairoPNG', echo=FALSE, fig.width=5, fig.height=5}
+m_bias(x_y_associated=TRUE) %>%
+  ggdag(node_size=20) + 
+  theme_dag_blank()
+```
+
+## Colliders
+
+- How could this be?
+- Because even if two variables *cause* the same thing (`a -> m`, `b -> m`), that doesn't make them related. Your parents both caused your genetic makeup, that doesn't make *their* genetics related. Knowing dad's eye color tells you nothing about mom's.
+- But *within given values of the collider*, they ARE related. If you're brown-eyed, then observing that your dad has blue eyes tells us that your mom is brown-eyed
+
+## Colliders
+
+- So here, `x <- a -> m <- b -> y` is pre-blocked, no problem. `a` and `b` are unrelated, so no back door issue!
+- Control for `m` and now `a` and `b` are related, back door path open.
+
+```{r, dev='CairoPNG', echo=FALSE, fig.width=5, fig.height=4}
+m_bias(x_y_associated=TRUE) %>%
+  ggdag(node_size=20) + 
+  theme_dag_blank()
+```
+
+## Example
+
+- You want to know if programming skills reduce your social skills
+- So you go to a tech company and test all their employees on programming and social skills
+- Let's imagine that the *truth* is that programming skills and social skills are unrelated
+- But you find a negative relationship! What gives?
+
+## Example
+
+- Oops! By surveying only the tech company, you controlled for "works in a tech company"
+- To do that, you need programming skills, social skills, or both! It's a collider!
+
+```{r, dev='CairoPNG', echo=FALSE, fig.width=5, fig.height=3.5}
+dag <- dagify(hired~prog,
+              hired~social,
+              coords=list(
+                x=c(prog=1,social=3,hired=2),
+                y=c(prog=2,social=2,hired=1)
+              )) %>% tidy_dagitty()
+ggdag_classic(dag,node_size=20) + 
+  theme_dag_blank()
+```
+
+## Example
+
+```{r, echo=TRUE, eval = FALSE}
+set.seed(14233)
+survey <- tibble(prog=rnorm(1000),social=rnorm(1000)) %>%
+  mutate(hired = (prog + social > .25))
+# Truth
+m1 <- lm(social~prog, data = survey)
+
+#Controlling by just surveying those hired
+m2 <- lm(social~prog, data = survey %>% filter(hired == 1))
+
+#Surveying everyone and controlling with our normal method
+m3 <- lm(social ~ prog + hired, data = survey)
+
+msummary(list(m1,m2,m3), stars = TRUE, gof_omit = 'Adj|BIC|AIC|Lik|F')
+```
+
+## Example
+
+```{r, echo=FALSE, eval = TRUE}
+set.seed(14233)
+survey <- tibble(prog=rnorm(1000),social=rnorm(1000)) %>%
+  mutate(hired = (prog + social > .25))
+# Truth
+m1 <- lm(social~prog, data = survey)
+
+#Controlling by just surveying those hired
+m2 <- lm(social~prog, data = survey %>% filter(hired == 1))
+
+#Surveying everyone and controlling with our normal method
+m3 <- lm(social ~ prog + hired, data = survey)
+
+msummary(list(m1,m2,m3), stars = TRUE, gof_omit = 'Adj|BIC|AIC|Lik|F')
+```
+
+
+
+## Graphically
+
+```{r, dev='CairoPNG', echo=FALSE, fig.width=5, fig.height=3.5}
+#Probably try a few times until the raw correlation looks nice and low
+df <- survey %>% 
+  transmute(time="1",
+         X=prog,Y=social,C=hired) %>%
+  group_by(C) %>%
+  mutate(mean_X=mean(X),mean_Y=mean(Y)) %>%
+  ungroup()
+
+#Calculate correlations
+before_cor <- paste("1. Start raw. Correlation between prog and social: ",round(cor(df$X,df$Y),3),sep='')
+after_cor <- paste("7. Cor between prog and social controlling for hired: ",round(cor(df$X-df$mean_X,df$Y-df$mean_Y),3),sep='')
+
+
+
+
+#Add step 2 in which X is demeaned, and 3 in which both X and Y are, and 4 which just changes label
+dffull <- rbind(
+  #Step 1: Raw data only
+  df %>% mutate(mean_X=NA,mean_Y=NA,C=0,time=before_cor),
+  #Step 2: Raw data only
+  df %>% mutate(mean_X=NA,mean_Y=NA,time='2. Separate data by the values of hired.'),
+  #Step 3: Add x-lines
+  df %>% mutate(mean_Y=NA,time='3. Figure out what differences in prog are explained by hired'),
+  #Step 4: X de-meaned 
+  df %>% mutate(X = X - mean_X,mean_X=0,mean_Y=NA,time="4. Remove differences in prog explained by hired"),
+  #Step 5: Remove X lines, add Y
+  df %>% mutate(X = X - mean_X,mean_X=NA,time="5. Figure out what differences in social are explained by hired"),
+  #Step 6: Y de-meaned
+  df %>% mutate(X = X - mean_X,Y = Y - mean_Y,mean_X=NA,mean_Y=0,time="6. Remove differences in social explained by hired"),
+  #Step 7: Raw demeaned data only
+  df %>% mutate(X = X - mean_X,Y = Y - mean_Y,mean_X=NA,mean_Y=NA,time=after_cor))
+
+p <- ggplot(dffull,aes(y=Y,x=X,color=as.factor(C)))+geom_point()+
+  geom_vline(aes(xintercept=mean_X,color=as.factor(C)))+
+  geom_hline(aes(yintercept=mean_Y,color=as.factor(C)))+
+  guides(color=guide_legend(title="Hired"))+
+  scale_color_colorblind()+
+  labs(title = 'Inventing a Correlation by Controlling for hired \n{next_state}',
+       x='Programming Skill',
+       y='Social Skill')+
+  transition_states(time,transition_length=c(1,12,32,12,32,12,12),state_length=c(160,125,100,75,100,75,160),wrap=FALSE)+
+  ease_aes('sine-in-out')+
+  exit_fade()+enter_fade()
+
+animate(p,nframes=200)
+```
+
+## Colliders
+
+- This doesn't just create correlations from nothing, it can also distort causal effects that ARE there
+- For example, did you know that height is UNrelated to basketball skill... among NBA players?
+
+```{r, dev='CairoPNG', echo=FALSE, fig.width=5, fig.height=4}
+basketball <- read.csv(text='PointsPerGame,HeightInches
+                          20.8,75
+                          17.6,81
+                          12.7,78
+                          10.9,76
+                          10.7,83
+                          10.1,75
+                          9,81
+                          8.8,82
+                          8.8,84
+                          8.7,81
+                          5.5,75
+                          5.5,73
+                          3.9,81
+                          2.3,84
+                          2.1,81
+                          1.8,77
+                          1,74
+                          0.5,80')
+ggplot(basketball,aes(x=HeightInches,y=PointsPerGame))+geom_point()+
+  labs(x="Height in Inches",
+       y="Points Per Game",
+       title="Chicago Bulls 2009-10")
+#Data from Scott Andrews at StatCrunch
+```
+
+
+## Colliders
+
+- Sometimes, things can get real tricky
+- In some cases, the same variable NEEDS to be controlled for to close a back door path, but it's a collider on ANOTHER back door path!
+- In those cases you just can't identify the effect, at least not easily
+- This pops up in estimates of the gender wage gap - example from Cunningham's Mixtape: should you control for occupation when looking at gender discrimination in the labor market?
+
+## Colliders in the Gender Wage Gap
+
+- We are interested in `gender -> discrim -> wage`; our treatment is `gender -> discrim`, the discrimination caused by your gender
+
+```{r, dev='CairoPNG', echo=FALSE, fig.width=5, fig.height=4.5}
+dag <- dagify(occup~gender+abil+discrim,
+              wage~abil+discrim+occup,
+              discrim~gender,
+              coords=list(
+                x=c(gender=1,discrim=2,occup=2,wage=3,abil=3),
+                y=c(gender=2,occup=1,discrim=3,wage=2,abil=1)
+              )) %>% tidy_dagitty()
+ggdag_classic(dag,node_size=20) + 
+  theme_dag_blank()
+```
+
+## Colliders in the Gender Wage Gap
+
+- <span style = "color:red">Front doors</span>/<span style = "color:blue">Open back doors</span>/<span style = "color:orange">Closed back doors</span>
+- <span style = "color:red">`gender -> discrim -> wage`</span>
+- <span style = "color:red">`gender -> discrim -> occup -> wage`</span>
+- <span style = "color:blue">`discrim <- gender -> occup -> wage`</span>
+- <span style = "color:orange">`discrim <- gender -> occup <- abil -> wage`</span>
+- <span style = "color:orange">`gender -> discrim -> occup <- abil -> wage`</span>
+
+## Colliders in the Gender Wage Gap
+
+- No `occup` control? Ignore nondiscriminatory reasons to choose different occupations by gender
+- Control for `occup`? Open both back doors, create a correlation between `abil` and `discrim` where there wasn't one
+- And also close a FRONT door, `gender -> discrim -> occup -> wage`: discriminatory reasons for gender diffs in `occup`
+- We actually *can't* identify the effect we want in this diagram by controlling. It happens!
+- Suggests this question goes beyond just controlling for stuff. Real research on this topic gets clever.
+
+## Next Time
+
+- Perhaps one of the ways we could get at the problem is by isolating *front doors* instead of focusing on closing *back doors*
+- Many common causal inference methods combine the two!
+- Next time we'll look at the concept of isolating a front door path, usually using "natural experiments"
+
+## Practice
+
+- We want to know how `X` affects `Y`. Find all paths and make a list of what to adjust for to close all back doors
+
+```{r, dev='CairoPNG', echo=FALSE, fig.width=7, fig.height=5}
+dag <- dagify(Y~X+A+B+C+E,
+              X~A+B+D,
+              E~X,
+              A~U1+C,
+              B~U1,
+              coords=list(
+                x=c(X=1,E=2.5,A=2,B=3.5,C=1.5,D=1,Y=4,U1=2.5),
+                y=c(X=2,E=2.25,A=3,B=3,C=4,D=3,Y=2,U1=4)
+              )) %>% tidy_dagitty()
+ggdag_classic(dag,node_size=20) + 
+  theme_dag_blank()
+```
+
+## Practice Answers
+
+- Front door paths: `X -> Y`, `X -> E -> Y`
+- Back doors: `X <- A -> Y`, `X <- B -> Y`, `X <- A <- U1 -> B -> Y`, `X <- B <- U1 -> A -> Y`, `X <- A <- C -> Y`, `X <- B <- U1 -> A <- C -> Y`
+- (`X <- B <- U1 -> A <- C -> Y` is pre-closed by a collider)
+- We can close all back doors by adjusting for `A` and `B`.

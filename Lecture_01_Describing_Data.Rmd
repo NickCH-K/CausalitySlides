@@ -1,0 +1,415 @@
+---
+title: "Lecture 1: Describing Data"
+author: "Nick Huntington-Klein"
+date: "`r Sys.Date()`"
+output:   
+  revealjs::revealjs_presentation:
+    theme: solarized
+    transition: slide
+    self_contained: true
+    smart: true
+    fig_caption: true
+    reveal_options:
+      slideNumber: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+library(tidyverse)
+library(purrr)
+library(patchwork)
+library(ggpubr)
+theme_set(theme_gray(base_size = 15))
+```
+
+## Causality
+
+- This class is about causality
+- Welcome!
+- This class exists to answer one question: *how can we use statistics figure out how $X$ causes $Y$?*
+- It's a short question but an extremely difficult one
+
+## This Class
+
+- We'll be covering the purpose of statistical research and how it works
+- Then the concepts underlying causality and research design
+- And then some standard research designs for uncovering causality in observational data
+
+## Housekeeping
+
+- Let's go over the syllabus and projects!
+- The textbook: The Effect
+
+## This Week
+
+- We'll be discussion how we *describe variables* and *describe relationships*
+- With a bit of an R reminder
+- We'll cover a bit of regression review, but...!
+- This class is much more concerned with *design* than any particular estimator. *How is the data utilized?*
+- Regression is *one way* of doing this stuff, but regression is only one implementation. So we won't be solely focusing on it
+
+## This Week
+
+- We'll start with ways of discussing how we can *describe variables*
+- And then move on to ways of discussing how we can *describe relationships*
+- Secretly, pretty much all statistical analysis is just about doing one of those two things
+- *Causal* analysis is *purely* about *knowing exactly which variables and relationships to describe*
+
+## Variables
+
+- A statistical variable is a recorded observation, repeated many times
+- "Number of calories I ate for breakfast this morning" is one observation
+- "The number of calories I ate each breakfast in the past week" is a variable with seven observations
+
+## The Distribution of a Variable
+
+- Variables have *distributions*
+- The distribution of a variable is simply the description of *how often each value of the variable comes up*
+- So for example, the statement "10% of people are left-handed" is just a partial description of the distribution of the handedness variable. 
+- If you observe a bunch of people and record what their dominant hand is, 10% of the time you'll write down "left-handed," 1% of the time you'll write down "ambidextrous," and 89% of the time you'll write down "right-handed." That's the full description of the distribution
+
+## Looking Straight at a Distribution
+
+- The distribution of a variable contains *everything we know* about that variable from empirical observation
+- Any description we make will be a *summary* of that distribution
+- So we may as well look at it directly!
+
+## Distributions of Kinds of Variables
+
+- There are two main kinds of variables for which the distributions look different: discrete and continuous
+- Discrete variables take a finite set of values: left-handed, right-handed, ambidextrous. Or "lives in Seattle" vs. "Doesn't" or "Number of kids"
+- Continuous variables take any value: income, height, KwH of electricity used each day
+- (Sometimes, "ordinal" discrete variables with many values are treated as continuous for simplicity)
+
+## Discrete Distributions
+
+- To fully describe the distribution of a discrete variable, just give the proportion of time it takes each value. That's it!
+- Give a table with the proportions (or counts), or show a graph with the proportions
+
+```{r, echo = FALSE}
+handedness_data <- data.frame(hand = c(rep('Left', 9*452),rep('Ambidextrous',.5*452),rep('Right',90.5*452)))
+```
+
+```{r, echo = TRUE}
+library(tidyverse)
+handedness_data %>%
+  pull(hand) %>%
+  table() %>%
+  prop.table()
+```
+
+## Discrete Distributions
+
+```{r, echo = TRUE, eval = FALSE}
+ggplot(handedness_data, aes(x = hand)) + 
+  geom_bar(fill = 'white', color = 'black') + # These two lines are important
+  stat_count(geom = "text", size = 5,
+             aes(label = scales::percent(..count../nrow(handedness_data)), 
+                 y = ..count.. + 1300)) +
+  ggpubr::theme_pubr() + 
+  labs(x = 'Handedness', y = 'Count') # The rest is just decoration
+```
+
+## Discrete Distributions
+
+```{r, echo = FALSE, eval = TRUE}
+ggplot(handedness_data, aes(x = hand)) + 
+  geom_bar(fill = 'white', color = 'black') + # These two lines are important
+  stat_count(geom = "text", size = 5,
+             aes(label = scales::percent(..count../nrow(handedness_data)), 
+                 y = ..count.. + 1300)) +
+  ggpubr::theme_pubr() + 
+  labs(x = 'Handedness', y = 'Count') # The rest is just decoration
+```
+
+## Using Discrete Distributions
+
+- What can we use a discrete distribution to say?
+- X% of observations are in category A
+- (X+Y)% of observations are in category (A or B)
+- If it's "ordinal" (the values have an order), we can describe the median, max, min, etc.
+- There are also dispersion measures describing how evenly distributed the categories are but we won't be going into that
+
+## Continuous Distributions
+
+- Variables that are numeric in nature and take *many* values have a continuous distribution
+- Their distributions can be presented in one of two main ways - using a *histogram* or using a *density distribution*
+- A *histogram* splits the range of the data up into bins and then just treats it like a ordinal discrete distribution
+- A *density distribution* uses a rolling average of the proportion of observations within each window
+
+## Continuous Distributions
+
+```{r, echo = FALSE}
+data(Scorecard, package = 'pmdplyr')
+```
+
+```{r, echo = TRUE, eval = FALSE}
+ggplot(Scorecard, aes(x = repay_rate)) + 
+  geom_histogram(bins = 5, fill = 'white', color = 'black') + 
+  ggpubr::theme_pubr() + 
+  labs(x = 'Proportion of Grads on-track to Repay Loans', y = 'Count', title = 'Loan Repayment by College')
+```
+
+## Continuous Distributions
+
+```{r, echo = FALSE, eval = TRUE}
+ggplot(Scorecard, aes(x = repay_rate)) + 
+  geom_histogram(bins = 5, fill = 'white', color = 'black') + 
+  ggpubr::theme_pubr() + 
+  labs(x = 'Proportion of Grads on-track to Repay Loans', y = 'Count', title = 'Loan Repayment by College')
+```
+
+## Continuous Distributions
+
+
+```{r}
+ggplot(Scorecard, aes(x = repay_rate)) + 
+  geom_histogram(bins = 10, fill = 'white', color = 'black') + 
+  ggpubr::theme_pubr() + 
+  labs(x = 'Proportion of Grads on-track to Repay Loans', y = 'Count', title = 'Loan Repayment by College')
+```
+
+## Continuous Distributions
+
+
+```{r}
+ggplot(Scorecard, aes(x = repay_rate)) + 
+  geom_histogram(bins = 20, fill = 'white', color = 'black') + 
+  ggpubr::theme_pubr() + 
+  labs(x = 'Proportion of Grads on-track to Repay Loans', y = 'Count', title = 'Loan Repayment by College')
+```
+
+## Continuous Distributions
+
+
+```{r}
+ggplot(Scorecard, aes(x = repay_rate)) + 
+  geom_histogram(bins = 100, fill = 'white', color = 'black') + 
+  ggpubr::theme_pubr() + 
+  labs(x = 'Proportion of Grads on-track to Repay Loans', y = 'Count', title = 'Loan Repayment by College')
+```
+
+## Continuous Distributions
+
+
+```{r}
+ggplot(Scorecard, aes(x = repay_rate)) + 
+  geom_density(color = 'black') + 
+  ggpubr::theme_pubr() + 
+  labs(x = 'Proportion of Grads on-track to Repay Loans', y = 'Density', title = 'Loan Repayment by College')
+```
+
+
+## Continuous Distributions
+
+- We can describe these distributions fully using *percentiles*
+- The Xth percentile is the value for which X% of the sample is less than that value
+- Taken together, you can describe the entire sample by just going through percentiles
+
+## Continuous Distributions
+
+
+```{r, echo = FALSE}
+ggplot(Scorecard, aes(x = repay_rate)) + 
+  geom_density(color = 'black') + 
+  geom_vline(aes(xintercept = quantile(repay_rate, .1, na.rm = TRUE))) + 
+  annotate(geom = 'label', x = quantile(Scorecard$repay_rate, .1, na.rm = TRUE), y =.5, label = '10th percentile') + 
+  annotate(geom = 'text', x = .25, y = .25, label = '10%') + 
+  annotate(geom = 'text', x = .6, y = .25, label = '90%') +
+  ggpubr::theme_pubr() + 
+  labs(x = 'Proportion of Grads on-track to Repay Loans', y = 'Density', title = 'Loan Repayment by College')
+```
+
+## Summarizing Continuous Data
+
+- Commonly we want to describe these distrbutions much more compactly, while still telling us something about them
+
+```{r, echo = TRUE}
+library(vtable)
+Scorecard %>%
+  select(repay_rate) %>%
+  sumtable()
+```
+
+## Summarizing Continuous Data
+
+- Every "summary statistic" of a given variable is just a way of describing some aspect of these distributions
+- Commonly we are focused on just a few important features of the distribution:
+- The central tendency
+- Dispersion
+
+## The Central Tendency
+
+- Central tendencies are ways of picking a single number that represents the variable best
+- Often: the mean
+- The median (50th percentile)
+- For categorical data, sometimes the mode
+
+
+## The Central Tendency
+
+- The median is good at being representative of *a typical observation*, and is not sensitive to outliers
+- The mean can be better thought of as a betting average. If you "bet the mean" and drew an infinite number of observations, you'd break even
+- If Jeff Bezos walks in the room, mean income shoots through the roof (because if you're randomly drawing people in the room, sometimes you're Jeff Bezos!), but the median largely remains unchanged (because Jeff Bezos isn't anywhere near being a typical person)
+
+## The Central Tendency
+
+- So why use the mean at all? It makes sense to think about those betting odds if you are, say, trying to predict something
+- It also has a bunch of nice statistical properties
+- Meaning, we *understand the mean* fairly well, and *we know how the mean changes as we go from sample to sample*
+- In other words, it's handy when we're trying to learn about the *theoretical distribution* our data comes from (more on that in a bit!)
+
+## Dispersion
+
+- Measures of dispersion tell us how *spread out* the data is
+- Some of these are percentile-based measures, like the inter-quartile range (75th percentile minus 25th) or the range (Max - Min, or 100th percentile minus 0th)
+- Most commonly we will use standard deviation and variance
+
+```{r, echo = FALSE}
+Scorecard %>%
+  select(repay_rate) %>%
+  sumtable(out = 'kable')
+```
+
+## Dispersion
+
+- Variance is *average squared deviation from the mean*. 
+- Take each observation, subtract the mean, square the result, and take the mean of *that* (times $n/(n-1)$ )
+- Standard deviation is the square root of the variance
+
+## Dispersion
+
+```{r}
+names <- c('Very Low Variation','A Little More Variation','Even More Variation','Lots of Variation')
+
+set.seed(1000)
+dfs <-  c(.2,.25,.5,.75) %>%
+  map(function(x)
+    data.frame(x = rnorm(100,sd=x)))
+
+p <- 1:4 %>%
+  map(function(x)
+    ggplot(dfs[[x]],aes(x=x))+
+      geom_density()+
+      scale_x_continuous(limits=c(min(dfs[[4]]$x),max(dfs[[4]]$x)))+
+      scale_y_continuous(limits=c(0,
+                                  max(density(dfs[[1]]$x)$y)))+
+      labs(x='Observed Value',y='Density',title=names[x])+
+      theme_pubr()+
+      theme(text = element_text(size = 13)))
+
+
+(p[[1]] + p[[2]]) / (p[[3]] + p[[4]])
+```
+
+## Skew
+
+- One other aspect of a distribution we sometimes consider is *skew*
+- Skew is sort of "how much the distribution *leans to one side or the other*
+- This can be a problem if the skew is extreme
+- Extreme right skew can make means highly unrepresentative as a few big observations pull the mean upwards
+- This can sometimes be helped by taking a log of the data
+
+## Skew
+
+```{r}
+set.seed(500)
+df <- data.frame(expy = exp(rnorm(10000)+1))
+
+p1 <- ggplot(df, aes(x = expy)) + geom_density() + 
+  geom_vline(aes(xintercept = mean(df$expy)), linetype = 'dashed') + 
+  annotate(x = mean(df$expy), y = .25, geom = 'label', label = 'Mean') +
+  labs(x = 'Value',y = 'Density', title = 'Skewed Data') +
+  theme_pubr() + 
+  theme(text         = element_text(size = 13),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank())
+
+p2 <- ggplot(df, aes(x = log(expy))) + geom_density() +
+  geom_vline(aes(xintercept = mean(log(df$expy))), linetype = 'dashed') + 
+  annotate(x = mean(log(df$expy)), y = .25, geom = 'label', label = 'Mean') +
+  labs(x = 'Value',y = 'Density', title = 'Logged Skewed Data') +
+  theme_pubr() + 
+  theme(text         = element_text(size = 13),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank())
+p1 + p2
+```
+
+## Theoretical Distributions
+
+- Now for the good stuff!
+- We *rarely actually care what our data is* or the distribution of it!
+- What we actually care about are *what broader inferences can we draw from the data we see!*
+- The mean of your variable is just *the mean of the observations you happened to sample*
+- But what can we learn about *how that variable works overall* from that?
+
+## Theoretical Distributions
+
+- There is a "population distribution" that we can't see - it's theoretical - we just get a sample
+- If we had infinite data, we'd see the theoretical distribution
+- To learn about that theoretical distribution, we take what we know about *sampling variation* and use it to rule out certain theoretical distributions as unlikely
+
+## Theoretical Distributions
+
+- For example, if we flip a coin 1000 times and get heads 999 times, can we rule out that it's a fair coin?
+- (the "theoretical distribution" here is a discrete one: the coin is heads 50% of the time and tails 50%)
+- We *assume that the coin is fair* (null/prior hypothesis) and see how unlikely the data is. If the coin is fair, we take what we know about sampling varaition for a binary variable and calculate that 999/1000 heads has a `dbinom(999, 1000, .5)` chance of happening
+- So that's probably not the real theoretical distribution!
+
+## Theoretical Distributions
+
+Reminders:
+
+- All we've shown is that *a particular theoretical distribution is unlikely*, not *anything else*
+- We don't know what the proper theoretical distribution *is*
+- We haven't shown that our result is *important*
+- We have effectively calculated a p-value here - if it's low enough, we say "Statistically significant" but please don't get fooled into thinking that means anything other than what we've said here - a particular theoretical distribution is statistically unlikely to have generated this data
+
+## Sampling Variation
+
+- Often when trying to generalize from a sample to a theoretical distribution we will focus on the mean
+- This is because the sampling variation of the mean is very well-understood. It follows a normal distribution with a mean at the population mean, and a standard deviation of the population standard deviation, scaled by $1/\sqrt{n}$
+
+## Sampling Variation
+
+$$ \bar{X} = \hat{\mu} \sim N(\mu, \sigma/\sqrt{n}) $$
+
+- Latin letters ( $X, n$ ) are data
+- Modified Latin letters ( $\bar{X}$ ) are calculations made with data
+- Greek letters ( $\mu$ ) are population values/"the truth"
+- Modified Greek letters ( $\hat{\mu}$ ) are *our estimate of the truth*
+
+## Sampling Variation
+
+- With `r sum(!is.na(Scorecard$repay_rate))` observations, the average of that repayment rate is `r scales::number(mean(Scorecard$repay_rate, na.rm = TRUE), accuracy = .001)`, standard deviation is `r scales::number(sd(Scorecard$repay_rate, na.rm = TRUE), accuracy = .001)`
+- Does the average college have a repayment rate of 50\%?
+- If it does, then the mean of a sample of `r sum(!is.na(Scorecard$repay_rate))` observations should follow a distribution of $N(.5, \sigma/\sqrt{20890})$
+- Estimate $\hat{\sigma}$ using sample standard deviation $s$ (with a correction)
+
+## Sampling Variation
+
+- So if the true distribution has a mean of 50% (whatever kind of distribution it is, as long as it has a mean - we don't need to assume the distribution is normal, the sampling variation of the mean will be normal anyway), then $\bar{X} \sim N(.5, .0013)$
+- The probability of getting $\bar{X} =$ `r scales::number(mean(Scorecard$repay_rate, na.rm = TRUE), accuracy = .001)` or something even higher is `1-pnorm(.575, .5, .0013) = `r 1-pnorm(.575, .5, .0013)`. It rounds to 0 here but it's just an extremely small number. This is a *one-tailed p-value*
+- The probability of getting $\bar{X} =$ `r scales::number(mean(Scorecard$repay_rate, na.rm = TRUE), accuracy = .001)` or something *equally far away or farther from .5 in either direction* is `2*(1-pnorm(.575, .5, .0013)`, a *two-tailed p-value*
+
+## Sampling Variation
+
+- Another, possibly better way to think about it is what range of theoretical distributions we *wouldn't* find unlikely
+- We have to first define "unlikely" for this, often with a p-value cutoff
+- Then, a confidence interval around the actual sample mean tells us which theoretical means would not find the existing data "too unlikely"
+- $C.I. = [\bar{X} \pm z_\alpha\hat{\sigma}/\sqrt{n}]$, where $z_\alpha$ is based on our "too unlikely" definition. For a 95% confidence interval ("too unlikely" is a two-tailed p-value below .05), it's $z_{.05} \approx 1.96$
+
+## Statistical Inference
+
+- By using *what we know about sampling variation*, we can *make inferences about a variable's theoretical distribution (i.e. what mean that distribution is likely ot have)
+- In this way we can use what we have - data - to learn about what we actually care about - population distributions
+- We have to leverage what we know, and what we have, to make that theoretical inference that we really care about
+- This will echo very strongly once we start talking about causality!
+
+## Next Time
+
+- Not just single variables, but relationships!
+- What are those *population relationships?*
+- That's the real juicy stuff
+

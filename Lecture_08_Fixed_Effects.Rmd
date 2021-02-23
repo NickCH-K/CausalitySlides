@@ -1,0 +1,364 @@
+---
+title: "Lecture 8 Fixed Effects"
+author: "Nick Huntington-Klein"
+date: "`r Sys.Date()`"
+output:   
+  revealjs::revealjs_presentation:
+    theme: solarized
+    transition: slide
+    self_contained: true
+    smart: true
+    fig_caption: true
+    reveal_options:
+      slideNumber: true
+    
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning=FALSE, message=FALSE)
+library(tidyverse)
+library(stringr)
+library(dagitty)
+library(ggdag)
+library(gganimate)
+library(ggthemes)
+library(Cairo)
+library(gapminder)
+library(modelsummary)
+library(fixest)
+library(ggpubr)
+theme_set(theme_gray(base_size = 15))
+```
+
+## Recap
+
+- Last time we talked about how controlling is a common way of blocking back doors to identify an effect
+- We can control for a variable `W` by using our method of using `W` to explain our other variables, then take the residuals
+- Another form of controlling is using a sample that has only observations with similar values of `W`
+- Some variables you want to be careful NOT to control for - you don't want to close front doors, or open back doors by controlling for colliders
+
+## Today
+
+- Today we'll be starting on our path for the rest of the class, where we'll be talking about standard *methods* for performing causal inference
+- Different ways of getting identification once we have a diagram!
+- Our goal here will be to understand these methods *conceptually* and to also figure out some good statistical practices for their use
+- Our goal is to *understand* these methods and be able to apply a straightforward version of them
+
+## Today
+
+- In particular we'll be talking about a method that is commonly used to identify causal effects, called fixed effects
+- We'll be discussing the *kind* of causal diagram that fixed effects can identify
+- All of the methods we'll be discussing are like this - they'll only apply to particular diagrams
+- And so knowing our diagrams will be key to knowing when to use a given method
+
+## The Problem
+
+- One problem we ran into last time is that we can't really control for things if we can't measure them
+- And there are lots of things we can't measure or don't have data for!
+- So what can we do?
+
+## The Solution
+
+- If we observe each person/firm/country *multiple times*, then we can forget about controlling for the actual back-door variable we're interested in
+- And just control for *person/firm/country identity* instead!
+- This will control for EVERYTHING unique to that individual, whether we can measure it or not!
+
+## In Practice
+
+- Let's do this on the data from the "gapminder" package
+- This data tracks life expectancy and GDP per capita in many countries over time
+
+```{r, echo=TRUE, eval=FALSE}
+library(gapminder)
+data(gapminder)
+cor(gapminder$lifeExp,log(gapminder$gdpPercap))
+```
+```{r, echo=FALSE, eval=TRUE}
+data(gapminder)
+cor(gapminder$lifeExp,log(gapminder$gdpPercap))
+```
+
+```{r, echo=TRUE}
+gapminder <- gapminder %>% group_by(country) %>%
+  mutate(lifeExp.r = lifeExp - mean(lifeExp),
+         logGDP.r = log(gdpPercap) - mean(log(gdpPercap))) %>% ungroup()
+cor(gapminder$lifeExp.r,gapminder$logGDP.r)
+```
+
+## So What?
+
+- This isn't any different, mechanically, from any other time we've controlled for something
+- So what's different here?
+- Let's think about what we're doing conceptually
+
+## What's the Diagram?
+
+- Why are we controlling for things in this gapminder analysis?
+- Because there are LOTS of things that might be back doors between GDP per capita and life expectancy
+- War, disease, political institutions, trade relationships, health of the population, economic institutions...
+
+## What's the Diagram?
+
+```{r, dev='CairoPNG', echo=FALSE, fig.width=5, fig.height=6}
+dag <- dagify(LifeEx~GDPpc+A+B+C+D+E+F+G+H,
+              GDPpc~A+B+C+D+E+F+G+H,
+              coords=list(
+                x=c(LifeEx=4,GDPpc=2,A=1,B=2,C=3,D=4,E=1,F=2,G=3,H=4),
+                y=c(LifeEx=2,GDPpc=2,A=3,B=3,C=3,D=3,E=1,F=1,G=1,H=1)
+              )) %>% tidy_dagitty()
+ggdag_classic(dag,node_size=20) + 
+  theme_dag_blank()
+```
+
+## What's the Diagram?
+
+- There's no way we can identify this
+- The list of back doors is very long
+- And likely includes some things we can't measure!
+
+## What's the Diagram?
+
+- HOWEVER! If we think that these things are likely to be constant within country...
+- Then we don't really have a big long list of back doors, we just have one: "country"
+
+```{r, dev='CairoPNG', echo=FALSE, fig.width=5, fig.height=3.5}
+dag <- dagify(LifeEx~GDPpc+Coun,
+              GDPpc~Coun,
+              coords=list(
+                x=c(LifeEx=4,GDPpc=2,Coun=3),
+                y=c(LifeEx=2,GDPpc=2,Coun=3)
+              )) %>% tidy_dagitty()
+ggdag_classic(dag,node_size=20) + 
+  theme_dag_blank()
+```
+
+## What We Get
+
+- So what we get out of this is that we can identify our effect even if some of our back doors include variables that we can't actually measure
+- When we do this, we're basically comparing countries *to themselves* at different time periods!
+- Pretty good way to do an apples-to-apples comparison!
+
+## Graphically
+
+```{r, dev='CairoPNG', echo=FALSE, fig.width=7, fig.height=5}
+lgdpmean <- mean(log(gapminder$gdpPercap))
+lemean <- mean(gapminder$lifeExp)
+ggplot(gapminder)+geom_point(aes(x=log(gdpPercap)-lgdpmean,y=lifeExp-lemean,color="Raw"),alpha=.6)+
+  geom_point(aes(x=logGDP.r,y=lifeExp.r,color="After Fixed Effects"))+
+  geom_point(data=filter(gapminder,country=="Pakistan"),
+             aes(x=log(gdpPercap)-lgdpmean,y=lifeExp-lemean,color="Raw Pakistan"),size=3)+
+  labs(x="log(GDP Per Capita)",y="Life Expectancy")+
+  theme(axis.text.x=element_blank(),
+        axis.text.y=element_blank())+
+  scale_color_manual(name="Values",values=c("After Fixed Effects" = "blue","Raw" = "black","Raw Pakistan" = "red"))
+```
+
+## Graphically
+
+- The post-fixed-effects dots are basically a bunch of "Raw Country X" pasted together.
+- Imagine taking "Raw Pakistan" and moving it to the center, then taking "Raw Britain" and moving it to the center, etc.
+- Ignoring the baseline differences between Pakistan, Britain, China, etc., in their GDP per capita and life expectancy, and just looking within each country.
+- We are ignoring all differences *between* countries (since that way back doors lie!) and looking only at differences *within* countries. 
+- Fixed Effects is sometimes also referred to as the "within" estimator
+
+## In Action
+
+```{r, dev='CairoPNG', echo=FALSE, fig.width=7, fig.height=5}
+df <- data.frame(Person = rep(1:4,50)) %>%
+  mutate(X = .5+.5*(Person-2.5) + rnorm(200)) %>%
+  mutate(Y = -.5*X + (Person-2.5) + 1 + rnorm(200),time="1") %>%
+  group_by(Person) %>%
+  mutate(mean_X=mean(X),mean_Y=mean(Y)) %>%
+  ungroup()
+
+#Calculate correlations
+before_cor <- paste("1. Start with raw data. Correlation between X and Y: ",round(cor(df$X,df$Y),3),sep='')
+after_cor <- paste("6. Within-Individual Correlation Between X and Y: ",round(cor(df$X-df$mean_X,df$Y-df$mean_Y),3),sep='')
+
+#Add step 2 in which X is demeaned, and 3 in which both X and Y are, and 4 which just changes label
+dffull <- rbind(
+  #Step 1: Raw data only
+  df %>% mutate(mean_X=NA,mean_Y=NA,time=before_cor),
+  #Step 2: Add x-lines
+  df %>% mutate(mean_Y=NA,time='2. Figure out between-Individual differences in X'),
+  #Step 3: X de-meaned 
+  df %>% mutate(X = X - mean_X,mean_X=0,mean_Y=NA,time="3. Remove all between-Individual differences in X"),
+  #Step 4: Remove X lines, add Y
+  df %>% mutate(X = X - mean_X,mean_X=NA,time="4. Figure out between-Individual differences in Y"),
+  #Step 5: Y de-meaned
+  df %>% mutate(X = X - mean_X,Y = Y - mean_Y,mean_X=NA,mean_Y=0,time="5. Remove all between-Individual differences in Y"),
+  #Step 6: Raw demeaned data only
+  df %>% mutate(X = X - mean_X,Y = Y - mean_Y,mean_X=NA,mean_Y=NA,time=after_cor))
+
+p <- ggplot(dffull,aes(y=Y,x=X,color=as.factor(Person)))+geom_point()+
+  geom_vline(aes(xintercept=mean_X,color=as.factor(Person)))+
+  geom_hline(aes(yintercept=mean_Y,color=as.factor(Person)))+
+  guides(color=guide_legend(title="Individual"))+
+  scale_color_colorblind()+
+  labs(title = 'The Relationship between Y and X, with Individual Fixed Effects \n{next_state}')+
+  transition_states(time,transition_length=c(12,32,12,32,12,12),state_length=c(160,100,75,100,75,160),wrap=FALSE)+
+  ease_aes('sine-in-out')+
+  exit_fade()+enter_fade()
+
+animate(p,nframes=200)
+```
+
+## Notably
+
+- This does assume, of course, that all those back door variables CAN be described by country
+- In other words, that these back doors operate by things that are *fixed* within country
+- If something is a back door and changes over time in that country, fixed effects won't help!
+
+## Varying Over Time
+
+- For example, earlier we mentioned war... that's not fixed within country! A given country is at war sometimes and not other times.
+
+```{r, dev='CairoPNG', echo=FALSE, fig.width=5, fig.height=4}
+dag <- dagify(LifeEx~GDPpc+Coun+War,
+              GDPpc~Coun+War,
+              coords=list(
+                x=c(LifeEx=4,GDPpc=2,Coun=3.5,War=2.5),
+                y=c(LifeEx=2,GDPpc=2,Coun=3,War=3)
+              )) %>% tidy_dagitty()
+ggdag_classic(dag,node_size=20) + 
+  theme_dag_blank()
+```
+
+## Varying Over Time
+
+- Of course, in this case, we could control for War as well and be good!
+- Time-varying things doesn't mean that fixed effects doesn't work, it just means you need to control for that stuff too
+- It always comes down to thinking carefully about your diagram
+- Fixed effects mainly works as a convenient way of combining together lots of different constant-within-country back doors into something that lets us identify the model even if we can't measure them all
+
+## Fixed Effects in Regression
+
+- We can just do fixed effects as we did-subtract out the group means and analyze (perhaps with regression) what's left
+- We can also include *dummy variables for each group/individual*, which accomplishes the same thing
+
+$$ Y = \beta_0 + \beta_1Group1 + \beta_2Group2 + ... + $$
+
+$$ \beta_NGroupN + \beta_{N+1}X + \varepsilon $$
+
+$$ Y = \beta_i + \beta_1X + \varepsilon $$
+
+## Fixed Effects in Regression
+
+- Why does that work?
+- We want to "control for group/individual" right? So... just... put in a control for group/individual
+- Of course, like all categorical variables as predictors, we leave out a reference group
+- But here, unlike with, say, a binary predictor, we're rarely interested in the FE coefficients themselves. Most software works with the mean-subtraction approach (or a variant) and don't even report them!
+
+## Fixed Effects in Regression: Variation
+
+- Remember we are isolating *within variation*
+- If an individual *has* no within variation, say their treatment never changes, they basically get washed out entirely!
+- A fixed-effects regression wouldn't represent them. And can't use FE to study things that are fixed over time
+- And in general if there's not a lot of within variation, FE is going to be very noisy. Make sure there's variation to study!
+
+## Fixed Effects in Regression: Notes
+
+- It's common to *cluster standard errors* at the level of the fixed effects, since it seems likely that errors would be correlated over time (autocorrelated errors)
+- It's possible to have *more than one set* of fixed effects. $Y = \beta_i + \beta_j + \beta_1X + \varepsilon$
+- But interpretation gets tricky - think through what variation in $X$ you're looking at at that point!
+
+## Coding up Fixed Effects
+
+- We will use the **fixest** package
+- It's very fast, and can be easily adjusted to do FE with other regression methods like logit, or combined with instrumental variables
+- Clusters at the first listed fixed effect by default
+
+```{r, echo = TRUE, eval = FALSE}
+library(fixest)
+
+m1 <- feols(outcome ~ predictors | FEs, data = data)
+msummary(m1)
+```
+
+## Example: Sentencing
+
+- What effect do sentencing reforms have on crime? 
+- One purpose of punishment for crime is to deter crime
+- If sentences are more clear and less risky, that may reduce a deterrent to crime and so increase crime
+- Marvell & Moody study this using data on reforms in US states from 1969-1989
+
+## Example: Sentencing
+
+```{r, echo=FALSE}
+mm <- as.data.frame(readLines('marvel_moody_sentencing.txt'))
+mm1 <- as.data.frame(mm[rep(c(TRUE,FALSE),2100/2),]) %>%
+  rename(mm1 = `mm[rep(c(TRUE, FALSE), 2100/2), ]`)
+mm2 <- as.data.frame(mm[rep(c(FALSE,TRUE),2100/2),]) %>%
+  rename(mm2 = `mm[rep(c(FALSE, TRUE), 2100/2), ]`)
+mmdata <- tibble(
+  state = substr(mm1$mm1,5,8),
+  year = as.numeric(substr(mm1$mm1,11,12)),
+  assault = as.numeric(substr(mm1$mm1,44,49)),
+  robbery = as.numeric(substr(mm1$mm1,50,55)),
+  pop1000 = as.numeric(substr(mm1$mm1,56,61)),
+  sentreform = as.numeric(str_sub(trimws(mm2$mm2),-3))
+) %>%
+  mutate(sentreform = ceiling(sentreform)) %>%
+  na.omit
+```
+
+- I've omitted code reading in the data
+- But in our data we have multiple observations per state
+
+```{r, echo=TRUE}
+head(mmdata)
+mmdata <- mmdata %>% mutate(assaultper1000 = assault/pop1000,
+         robberyper1000 = robbery/pop1000)
+```
+
+## Fixed Effects
+
+- We can see how robbery rates evolve in each state over time as states implement reform
+
+```{r, dev='CairoPNG', echo=FALSE, fig.width=8, fig.height=4.5}
+ggplot(mmdata,aes(x=year,y=robberyper1000,
+                group=state,color=factor(sentreform)))+
+  geom_line(size=1)+scale_color_colorblind(name="Reform")+
+  labs(x="Year",y="Robberies per 1000 Population") + 
+  theme_pubr() + 
+  theme(legend.position = c(.8,.9))
+```
+
+## Fixed Effects
+
+- You can tell that states are more or less likely to implement reform in a way that's correlated with the level of robbery they already had
+- So SOMETHING about the state is driving both the level of robberies AND the decision to implement reform
+- Who knows what!
+- Our diagram has `reform -> robberies` and `reform <- state -> robberies`, which is something we can address with fixed effects.
+
+## Fixed Effects
+
+```{r, echo=TRUE}
+sentencing_ols <- lm(robberyper1000 ~ sentreform, data = mmdata)
+sentencing_fe <- feols(robberyper1000 ~ sentreform | state, data = mmdata)
+msummary(list('OLS' = sentencing_ols, 'FE' = sentencing_fe), stars = TRUE, gof_omit = 'AIC|BIC|F|Lik|Adj|Pseudo')
+```
+
+## Example
+
+- The `r scales::number(coef(sentencing_ols), accuracy = .001)` included the fact that different kinds of states tend to institute reform
+- The `r scales::number(coef(sentencing_fe), accuracy = .001)` doesn't!
+- Looks like the deterrent effect was real! Although important to consider if there might be time-varying back doors too, we don't account for those in our analysis
+- What things might change within state over time that would be related to robberies and to sentencing reform?
+
+## Practice
+
+- We want to know the effect of your `teacher` on the `test score`s of high school students
+- Some potential back doors might go through: `parents' intelligence`, `age`, `demographics`, `school`, `last year's teacher`
+- Draw a diagram including all these variables, plus maybe some unobservables where appropriate
+- If you used fixed effects for students, what back doors would still be open?
+- What would the `feols()` command for this regression look like?
+
+## Practice Answers
+
+- Fixed effects would close your back doors for `parents' intelligence`, `demographics`, and `school`, but leave open `age` and `last year's teacher`
+
+```{r, eval = FALSE, echo = TRUE}
+m <- feols(TestScore ~ Teacher + Age + LastYearsTeacher | 
+             Student, data = data)
+```

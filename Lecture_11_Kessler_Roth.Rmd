@@ -1,0 +1,45 @@
+---
+title: "Lecture 11 Kessler and Roth"
+author: "Nick Huntington-Klein"
+date: "`r Sys.Date()`"
+output:   
+  revealjs::revealjs_presentation:
+    theme: solarized
+    transition: slide
+    self_contained: true
+    smart: true
+    fig_caption: true
+    reveal_options:
+      slideNumber: true
+    
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning=FALSE, message=FALSE)
+```
+
+## Difference-in-Differences
+
+- Today we'll be going over Kessler & Roth (2014) and seeing how they do DID
+- This is the same paper used as a coding example in the textbook
+- There's nothing particularly special about this paper - it's not groundbreaking or famous
+- But it's just a good example of how DID works in action
+
+## Discussion 1
+
+- What is the theoretical background of why they're studying this?
+- Why do they think that an observational study might do a *better* job than the experiments in this case?
+- What has the previous literature found?
+
+## Discussion 2
+
+- How do they set up their DID? How do they define treatment *and control*?
+- What assumptions do they focus on and how do they justify them?
+- What causal diagram might they have in mind?
+
+## Discussion 3
+
+- What do they find?
+- How can we interpret each column of Table 2?
+- Is there anything else they should have done?
+- How do they make sense of their results in the conclusion?
