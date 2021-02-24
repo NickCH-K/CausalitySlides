@@ -168,8 +168,7 @@ ggdag_classic(dag,node_size=20) +
 
 - Clearly, adjusting for health isn't ENOUGH to identify
 - We need to adjust for health AND income
-- We haven't covered how to actually control for multiple variables
-- We won't be focusing on it, but it's important for us to be able to know what *needs* to be controlled for
+- Conveniently, regression makes it easy to add additional controls
 
 ## Adjusting for Health and Income
 
@@ -404,7 +403,7 @@ sumtable(select(jtrain3,re75,re78), out = 'return')
 
 ## Controlling
 
-- We can't measure "needs training" directly, but we can sort of control for it by limiting ourselves solely to the kind of people who need it - those who had low wages in 1975!
+- We can't measure "needs training" directly, but we can sort of control for it by limiting ourselves solely to the kind of people who need it - those who had low wages in 1975
 
 ```{r, echo=FALSE, eval=TRUE}
 jtrain2 %>% group_by(train) %>% summarize(wage = mean(re78))
