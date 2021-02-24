@@ -130,7 +130,7 @@ create_data <- function() {
 set.seed(1000)
 ```
 
-```{r}
+```{r, echo = TRUE}
 run_model <- function(x) {
   m <- lm(Y~X, data = create_data())
   return(coef(m)[2])

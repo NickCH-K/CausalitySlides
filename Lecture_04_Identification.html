@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="generator" content="pandoc">
   <meta name="author" content="Nick Huntington-Klein" />
-  <meta name="dcterms.date" content="2020-12-27" />
+  <meta name="dcterms.date" content="2021-02-24" />
   <title>Lecture 4: Identification</title>
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -1845,7 +1845,7 @@ document.addEventListener('DOMContentLoaded', function(e) {
 <section>
     <h1 class="title">Lecture 4: Identification</h1>
     <h2 class="author">Nick Huntington-Klein</h2>
-    <h3 class="date">2020-12-27</h3>
+    <h3 class="date">2021-02-24</h3>
 </section>
 
 <section id="identification" class="slide level2">
@@ -1972,6 +1972,13 @@ document.addEventListener('DOMContentLoaded', function(e) {
 <ul>
 <li>Let’s try regular ol’ regress-<span class="math inline">\(Y\)</span>-on-<span class="math inline">\(X\)</span>. Shouldn’t work.</li>
 </ul>
+<div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true"></a>run_model &lt;-<span class="st"> </span><span class="cf">function</span>(x) {</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true"></a>  m &lt;-<span class="st"> </span><span class="kw">lm</span>(Y<span class="op">~</span>X, <span class="dt">data =</span> <span class="kw">create_data</span>())</span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true"></a>  <span class="kw">return</span>(<span class="kw">coef</span>(m)[<span class="dv">2</span>])</span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true"></a>}</span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true"></a></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true"></a><span class="kw">library</span>(purrr)</span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true"></a><span class="dv">1</span><span class="op">:</span><span class="dv">1000</span> <span class="op">%&gt;%</span><span class="st"> </span><span class="kw">map_dbl</span>(run_model) <span class="op">%&gt;%</span><span class="st"> </span><span class="kw">mean</span>()</span></code></pre></div>
 <pre><code>## [1] 1.865277</code></pre>
 </section>
 <section id="example-5" class="slide level2">
@@ -1992,12 +1999,12 @@ document.addEventListener('DOMContentLoaded', function(e) {
 </section>
 <section id="eliminate-alternative-explanations-1" class="slide level2">
 <h2>Eliminate Alternative Explanations</h2>
-<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true"></a>run_model_<span class="dv">2</span> &lt;-<span class="st"> </span><span class="cf">function</span>(x) {</span>
-<span id="cb4-2"><a href="#cb4-2" aria-hidden="true"></a>  m &lt;-<span class="st"> </span><span class="kw">lm</span>(Y<span class="op">~</span>X <span class="op">+</span><span class="st"> </span>W, <span class="dt">data =</span> <span class="kw">create_data</span>())</span>
-<span id="cb4-3"><a href="#cb4-3" aria-hidden="true"></a>  <span class="kw">return</span>(<span class="kw">coef</span>(m)[<span class="dv">2</span>])</span>
-<span id="cb4-4"><a href="#cb4-4" aria-hidden="true"></a>}</span>
-<span id="cb4-5"><a href="#cb4-5" aria-hidden="true"></a></span>
-<span id="cb4-6"><a href="#cb4-6" aria-hidden="true"></a><span class="dv">1</span><span class="op">:</span><span class="dv">1000</span> <span class="op">%&gt;%</span><span class="st"> </span><span class="kw">map_dbl</span>(run_model_<span class="dv">2</span>) <span class="op">%&gt;%</span><span class="st"> </span><span class="kw">mean</span>()</span></code></pre></div>
+<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true"></a>run_model_<span class="dv">2</span> &lt;-<span class="st"> </span><span class="cf">function</span>(x) {</span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true"></a>  m &lt;-<span class="st"> </span><span class="kw">lm</span>(Y<span class="op">~</span>X <span class="op">+</span><span class="st"> </span>W, <span class="dt">data =</span> <span class="kw">create_data</span>())</span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true"></a>  <span class="kw">return</span>(<span class="kw">coef</span>(m)[<span class="dv">2</span>])</span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true"></a>}</span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true"></a></span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true"></a><span class="dv">1</span><span class="op">:</span><span class="dv">1000</span> <span class="op">%&gt;%</span><span class="st"> </span><span class="kw">map_dbl</span>(run_model_<span class="dv">2</span>) <span class="op">%&gt;%</span><span class="st"> </span><span class="kw">mean</span>()</span></code></pre></div>
 <pre><code>## [1] 2.997931</code></pre>
 </section>
 <section id="isolate-good-variation" class="slide level2">
@@ -2011,12 +2018,12 @@ document.addEventListener('DOMContentLoaded', function(e) {
 </section>
 <section id="isolate-good-variation-1" class="slide level2">
 <h2>Isolate Good Variation</h2>
-<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true"></a>run_model_<span class="dv">3</span> &lt;-<span class="st"> </span><span class="cf">function</span>(x) {</span>
-<span id="cb6-2"><a href="#cb6-2" aria-hidden="true"></a>  m &lt;-<span class="st"> </span><span class="kw">lm</span>(Y<span class="op">~</span>X, <span class="dt">data =</span> <span class="kw">create_data</span>() <span class="op">%&gt;%</span><span class="st"> </span><span class="kw">filter</span>(origin <span class="op">==</span><span class="st"> &#39;Experimental&#39;</span>))</span>
-<span id="cb6-3"><a href="#cb6-3" aria-hidden="true"></a>  <span class="kw">return</span>(<span class="kw">coef</span>(m)[<span class="dv">2</span>])</span>
-<span id="cb6-4"><a href="#cb6-4" aria-hidden="true"></a>}</span>
-<span id="cb6-5"><a href="#cb6-5" aria-hidden="true"></a></span>
-<span id="cb6-6"><a href="#cb6-6" aria-hidden="true"></a><span class="dv">1</span><span class="op">:</span><span class="dv">1000</span> <span class="op">%&gt;%</span><span class="st"> </span><span class="kw">map_dbl</span>(run_model_<span class="dv">3</span>) <span class="op">%&gt;%</span><span class="st"> </span><span class="kw">mean</span>()</span></code></pre></div>
+<div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true"></a>run_model_<span class="dv">3</span> &lt;-<span class="st"> </span><span class="cf">function</span>(x) {</span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true"></a>  m &lt;-<span class="st"> </span><span class="kw">lm</span>(Y<span class="op">~</span>X, <span class="dt">data =</span> <span class="kw">create_data</span>() <span class="op">%&gt;%</span><span class="st"> </span><span class="kw">filter</span>(origin <span class="op">==</span><span class="st"> &#39;Experimental&#39;</span>))</span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true"></a>  <span class="kw">return</span>(<span class="kw">coef</span>(m)[<span class="dv">2</span>])</span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true"></a>}</span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true"></a></span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true"></a><span class="dv">1</span><span class="op">:</span><span class="dv">1000</span> <span class="op">%&gt;%</span><span class="st"> </span><span class="kw">map_dbl</span>(run_model_<span class="dv">3</span>) <span class="op">%&gt;%</span><span class="st"> </span><span class="kw">mean</span>()</span></code></pre></div>
 <pre><code>## [1] 2.97789</code></pre>
 </section>
 <section id="key-concepts" class="slide level2">
