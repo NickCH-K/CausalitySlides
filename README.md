@@ -11,7 +11,7 @@ It also makes use of my series of [Videos on Causality](http://nickchk.com/video
 
 [Lecture 3: Causality](https://nickch-k.github.io/CausalitySlides/Lecture_03_Causality.html#/)
 
-[Lecture 4: Identification](https://nickch-k.github.io/CausalitySlides/Lecture_04_Identification.html#/)
+[Lecture 4: Identification](https://nickch-k.github.io/CausalitySlides/Lecture_04_Identification.html#/) ([Agan and Starr paper](https://nickch-k.github.io/CausalitySlides/Lecture_04_Agan_Starr_2017.pdf))
 
 [Lecture 5: Causal Diagrams](https://nickch-k.github.io/CausalitySlides/Lecture_05_Causal_Diagrams.html#/)
 
