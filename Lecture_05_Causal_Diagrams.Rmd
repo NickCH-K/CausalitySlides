@@ -523,11 +523,3 @@ ggdag_classic(dag,node_size=20) +
 3. Arrows
 
 - Then, when you're done, draw it in Dagitty.net!
-
-## Causal Inference in the News
-
-- Not long: 1-2 pages single-spaced plus diagram.
-- Find a news article that makes a causal claim (like the one we just did, but not that one) and interpret that claim by drawing an appropriate diagram in dagitty
-- Doesn't necessarily need to be a claim backed by a study or evidence, but it makes the assignment easier if it is
-- Justify your diagram (both your choice of variables and your arrows)
-- Explain how you would identify the causal claim, and discuss whether you think the article did so or not.
