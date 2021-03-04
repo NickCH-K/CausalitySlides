@@ -277,7 +277,7 @@ ggdag_classic(dag,node_size=20) +
 
 `D` is global demand for US manufactures, `L` is US labor supply, `Close` measures how similar the kinds of things the US manufactures are to China manufactures
 
-```{r, dev='CairoPNG', echo=FALSE, fig.width=6,fig.height=4}
+```{r, dev='CairoPNG', echo=FALSE, fig.width=8,fig.height=4}
 dag <- dagify(CEXus~CEXoth+D+L+Close,
               mfg~CEXus+D+L+Close,
               D~U1+L,
